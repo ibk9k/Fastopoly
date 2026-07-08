@@ -141,32 +141,6 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🎨 Media Integration Guide
-
-To add screenshots, GIFs, or walkthrough videos to this README:
-
-### 1. File Locations
-Place all assets in the corresponding subdirectories inside the `public` directory:
-- **Images/GIFs**: `public/images/`
-- **Videos**: `public/videos/`
-
-### 2. Embedding Images
-Use standard markdown image syntax with relative paths:
-```markdown
-![Alternative Description](public/images/filename.png)
-```
-
-### 3. Embedding Videos
-Because standard markdown doesn't support interactive video players directly, use HTML5 `<video>` tags:
-```html
-<video src="public/videos/walkthrough.mp4" controls width="100%" poster="public/images/video_thumbnail.png">
-  Your browser does not support the video tag.
-</video>
-```
-Alternatively, convert video clips to animated `.webp` or `.gif` images and embed them using the image markdown syntax.
-
----
-
 ## 📄 License
 
 This project is open-source software licensed under the [MIT License](LICENSE).
