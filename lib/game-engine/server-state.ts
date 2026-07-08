@@ -1,0 +1,212 @@
+import { Liveblocks } from '@liveblocks/node'
+import { nanoid } from 'nanoid'
+import type { GameLogEntry, GameRules, JsonStorage, Player, Property } from '@/lib/liveblocks.config'
+import { PROPERTY_IDS } from './board'
+
+type StorageRoot = {
+  set: (key: keyof JsonStorage | string, value: unknown) => void
+}
+
+type LiveblocksStorageClient = {
+  getStorageDocument: (roomId: string, format: 'json') => Promise<JsonStorage | null>
+  initializeStorageDocument: (roomId: string, storage: JsonStorage) => Promise<void>
+  mutateStorage: (roomId: string, callback: (context: { root: StorageRoot }) => void | Promise<void>) => Promise<void>
+  broadcastEvent?: (roomId: string, event: unknown) => Promise<void>
+}
+
+let liveblocksServer: LiveblocksStorageClient | null = null
+
+function getLiveblocksServer(): LiveblocksStorageClient {
+  const secret = process.env.LIVEBLOCKS_SECRET_KEY
+  if (!secret) throw new Error('LIVEBLOCKS_SECRET_KEY is not configured')
+
+  liveblocksServer ??= new Liveblocks({
+    secret,
+  }) as unknown as LiveblocksStorageClient
+
+  return liveblocksServer
+}
+
+export function liveblocksRoomId(roomId: string): string {
+  return roomId.startsWith('fastopoly-') ? roomId : `fastopoly-${roomId}`
+}
+
+export function emptyStorage(rules?: GameRules, mapType = 'classic'): JsonStorage {
+  return {
+    gamePhase: 'lobby',
+    currentPlayerIndex: 0,
+    players: [],
+    properties: {},
+    bank: 20580,
+    freeParkingPool: 0,
+    chanceIndex: 0,
+    communityChestIndex: 0,
+    tradeOffer: null,
+    log: [],
+    rules: rules ?? { startingCash: 1500, freeParkingJackpot: false, auctionOnPass: true, speedDie: false, maxPlayers: 4 },
+    mapType,
+    winnerIds: [],
+    houseSupply: 32,
+    hotelSupply: 12,
+    lastRollWasDoubles: false,
+    lastDiceRoll: { d1: 3, d2: 4, timestamp: 0 },
+    auctionHighestBid: 0,
+    auctionHighestBidderId: null,
+    auctionEndTime: 0,
+    hasRolled: false,
+  }
+}
+
+export function initialProperties(): Record<string, Property> {
+  return Object.fromEntries(
+    PROPERTY_IDS.map((id) => [id, { id, ownerId: null, houses: 0, hotels: 0, mortgaged: false }]),
+  )
+}
+
+export async function readGameStorage(roomId: string): Promise<JsonStorage> {
+  const storage = await getLiveblocksServer().getStorageDocument(liveblocksRoomId(roomId), 'json')
+  if (!storage) throw new Error('Room storage not found')
+  return {
+    ...emptyStorage(storage.rules, storage.mapType),
+    ...storage,
+    players: storage.players ?? [],
+    properties: storage.properties ?? {},
+    log: storage.log ?? [],
+  }
+}
+
+export async function initializeGameStorage(roomId: string, storage: JsonStorage): Promise<void> {
+  await getLiveblocksServer().initializeStorageDocument(liveblocksRoomId(roomId), storage)
+}
+
+export async function writeGameStorage(roomId: string, storage: JsonStorage, keys?: string[]): Promise<void> {
+  await getLiveblocksServer().mutateStorage(liveblocksRoomId(roomId), ({ root }) => {
+    const keysToWrite = keys ?? Object.keys(storage)
+    keysToWrite.forEach((key) => {
+      root.set(key, (storage as any)[key])
+    })
+  })
+}
+
+export async function mutateGameStorage<T extends Record<string, any> | void>(
+  roomId: string,
+  mutator: (storage: JsonStorage) => T | Promise<T>,
+): Promise<T> {
+  const storage = await readGameStorage(roomId)
+
+  // Snapshot the initial state of each key using JSON serialization
+  const snapshot: Record<string, string> = {}
+  Object.entries(storage).forEach(([key, value]) => {
+    snapshot[key] = JSON.stringify(value)
+  })
+
+  const result = await mutator(storage)
+
+  // 'skipWrite' is a reserved key across all mutateGameStorage callers to prevent redundant writes
+  const skipWrite =
+    result &&
+    typeof result === 'object' &&
+    'skipWrite' in result &&
+    (result as any).skipWrite === true
+
+  if (!skipWrite) {
+    // Identify which keys actually changed
+    const changedKeys: string[] = []
+    Object.entries(storage).forEach(([key, value]) => {
+      const currentStr = JSON.stringify(value)
+      if (snapshot[key] !== currentStr) {
+        changedKeys.push(key)
+      }
+    })
+
+    if (changedKeys.length > 0) {
+      await writeGameStorage(roomId, storage, changedKeys)
+    }
+  }
+  return result
+}
+
+export async function transactionalMutate<T>(
+  roomId: string,
+  mutator: (root: any) => T | Promise<T>
+): Promise<T> {
+  let result: T
+  await getLiveblocksServer().mutateStorage(liveblocksRoomId(roomId), async ({ root }) => {
+    result = await mutator(root)
+  })
+  return result!
+}
+
+export async function broadcastRoomEvent(roomId: string, event: unknown): Promise<void> {
+  const server = getLiveblocksServer()
+  if (server.broadcastEvent) {
+    await server.broadcastEvent(liveblocksRoomId(roomId), event)
+  }
+}
+
+export function addLog(storage: JsonStorage, message: string): void {
+  const entry: GameLogEntry = { id: nanoid(), message, timestamp: Date.now() }
+  storage.log = [...storage.log, entry]
+}
+
+export function playerMap(players: Player[]): Map<string, Player> {
+  return new Map(players.map((player) => [player.id, player]))
+}
+
+export function propertyMap(properties: Record<string, Property>): Map<string, Property> {
+  return new Map(Object.entries(properties))
+}
+
+export function endTurn(storage: JsonStorage): void {
+  const activePlayers = storage.players.filter((player) => !player.isBankrupt)
+  if (activePlayers.length <= 1) {
+    storage.gamePhase = 'ended'
+    storage.winnerIds = activePlayers.map((player) => player.id)
+    return
+  }
+
+  // If the active player is in debt, keep them active so they must resolve it
+  const currentPlayer = storage.players[storage.currentPlayerIndex]
+  if (currentPlayer && currentPlayer.cash < 0 && !currentPlayer.isBankrupt) {
+    storage.gamePhase = 'playing'
+    addLog(storage, `${currentPlayer.username} is in debt and must raise funds or declare bankruptcy.`)
+    return
+  }
+
+  if (storage.lastRollWasDoubles) {
+    storage.lastRollWasDoubles = false
+    const activePlayer = storage.players[storage.currentPlayerIndex]
+    if (activePlayer) {
+      addLog(storage, `${activePlayer.username} gets another roll for rolling doubles!`)
+    }
+    storage.gamePhase = 'playing'
+    storage.hasRolled = false
+    return
+  }
+
+  let nextIndex = storage.currentPlayerIndex
+  for (let attempt = 0; attempt < storage.players.length; attempt += 1) {
+    nextIndex = (nextIndex + 1) % storage.players.length
+    if (!storage.players[nextIndex]?.isBankrupt) break
+  }
+
+  storage.currentPlayerIndex = nextIndex
+  storage.gamePhase = 'playing'
+  storage.hasRolled = false
+}
+
+export function handlePostLanding(storage: JsonStorage): void {
+  if (storage.lastRollWasDoubles) {
+    storage.lastRollWasDoubles = false
+    storage.hasRolled = false
+    const activePlayer = storage.players[storage.currentPlayerIndex]
+    if (activePlayer) {
+      addLog(storage, `${activePlayer.username} gets another roll for rolling doubles!`)
+    }
+  }
+  storage.gamePhase = 'playing'
+}
+
+export function toPropertyRecord(properties: Map<string, Property>): Record<string, Property> {
+  return Object.fromEntries(properties.entries())
+}

@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: #e58a74 #F7F0E4;
+}
+
+/* Custom scrollbar styling for a lighter, thematic look */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F7F0E4;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e58a74;
+  border: 2px solid #F7F0E4;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2f4d20;
+}
+
+body {
+  margin: 0;
+  background: #F7F0E4;
+  color: #18181b;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+/* ── Board sizing ─────────────────────────────────────────────────── */
+
+.board-wrapper {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: min(92vw, calc(100vh - 48px));
+  container-type: inline-size;
+  --bar-size: 2.2cqw;
+}
+
+@media (min-width: 640px) {
+  .board-wrapper {
+    --bar-size: 3cqw;
+  }
+}
+
+@media (min-width: 1024px) {
+  .board-wrapper {
+    max-width: min(calc(100vw - 420px), calc(100vh - 48px));
+  }
+}
+
+/* ── Game root ────────────────────────────────────────────────────── */
+
+.game-root {
+  /* Prevent any scrolling during gameplay */
+  overscroll-behavior: none;
+}
+
+/* ── Tile cells ───────────────────────────────────────────────────── */
+
+
+
+/* ── Smooth transitions for board ─────────────────────────────────── */
+
+.board-grid > * {
+  transition: box-shadow 200ms ease;
+}

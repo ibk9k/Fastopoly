@@ -1,0 +1,74 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { COLOR_GROUPS, getTile } from '@/lib/game-engine/board'
+import { hasFullColorGroup } from '@/lib/game-engine/actions'
+import { badRequest, routeError } from '@/lib/game-engine/route-utils'
+import { addLog, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
+
+export async function POST(req: NextRequest) {
+  try {
+    const { roomId, playerId, propertyId, action } = (await req.json()) as {
+      roomId?: string
+      playerId?: string
+      propertyId?: string
+      action?: 'build' | 'demolish'
+    }
+    if (!roomId || !playerId || !propertyId || !action) return badRequest('Missing build fields')
+
+    await mutateGameStorage(roomId, (storage) => {
+      const player = storage.players.find((candidate) => candidate.id === playerId)
+      const tile = getTile(propertyId)
+      const properties = propertyMap(storage.properties)
+      const property = properties.get(propertyId)
+      if (!player || !tile || !property) throw new Error('Invalid player or property')
+      if (property.ownerId !== playerId) throw new Error('Player does not own property')
+      if (!hasFullColorGroup(playerId, propertyId, properties)) throw new Error('Full color group required')
+
+      const groupIds = COLOR_GROUPS[tile.colorGroup ?? ''] ?? []
+      const group = groupIds.map((id) => properties.get(id)).filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+
+      if (action === 'build') {
+        if (property.hotels > 0) throw new Error('Property already has a hotel')
+        const minBuildings = Math.min(...group.map((item) => item.hotels > 0 ? 5 : item.houses))
+        const currentBuildings = property.hotels > 0 ? 5 : property.houses
+        if (currentBuildings > minBuildings) throw new Error('Even building rule violation')
+        if (property.houses === 4) {
+          if ((storage.hotelSupply ?? 12) <= 0) throw new Error('No hotels available')
+          player.cash -= tile.hotelCost ?? 0
+          property.houses = 0
+          property.hotels = 1
+          storage.houseSupply = (storage.houseSupply ?? 32) + 4
+          storage.hotelSupply = (storage.hotelSupply ?? 12) - 1
+          player.hasBuiltHotel = true
+        } else {
+          if ((storage.houseSupply ?? 32) <= 0) throw new Error('No houses available')
+          player.cash -= tile.houseCost ?? 0
+          property.houses += 1
+          storage.houseSupply = (storage.houseSupply ?? 32) - 1
+        }
+        addLog(storage, `${player.username} built on ${tile.name}.`)
+      } else {
+        const maxBuildings = Math.max(...group.map((item) => item.hotels > 0 ? 5 : item.houses))
+        const currentBuildings = property.hotels > 0 ? 5 : property.houses
+        if (currentBuildings === 0 || currentBuildings < maxBuildings) throw new Error('Even demolish rule violation')
+        if (property.hotels > 0) {
+          property.hotels = 0
+          property.houses = 4
+          player.cash += Math.floor((tile.hotelCost ?? 0) / 2)
+          storage.hotelSupply = (storage.hotelSupply ?? 12) + 1
+          storage.houseSupply = (storage.houseSupply ?? 32) - 4
+        } else {
+          property.houses -= 1
+          player.cash += Math.floor((tile.houseCost ?? 0) / 2)
+          storage.houseSupply = (storage.houseSupply ?? 32) + 1
+        }
+        addLog(storage, `${player.username} demolished on ${tile.name}.`)
+      }
+
+      storage.properties = toPropertyRecord(properties)
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return routeError(error, 'Build failed')
+  }
+}
