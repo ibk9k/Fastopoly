@@ -5,6 +5,7 @@ import { PROPERTY_IDS } from './board'
 
 type StorageRoot = {
   set: (key: keyof JsonStorage | string, value: unknown) => void
+  toImmutable: () => unknown
 }
 
 type LiveblocksStorageClient = {
@@ -50,6 +51,7 @@ export function emptyStorage(rules?: GameRules, mapType = 'classic'): JsonStorag
     houseSupply: 32,
     hotelSupply: 12,
     lastRollWasDoubles: false,
+    consecutiveDoubles: 0,
     lastDiceRoll: { d1: 3, d2: 4, timestamp: 0 },
     auctionHighestBid: 0,
     auctionHighestBidderId: null,
@@ -116,6 +118,7 @@ export async function seedLobbyStorage(roomId: string, rules: GameRules, mapType
       houseSupply: 32,
       hotelSupply: 12,
       lastRollWasDoubles: false,
+      consecutiveDoubles: 0,
       lastDiceRoll: { d1: 3, d2: 4, timestamp: 0 },
       auctionHighestBid: 0,
       auctionHighestBidderId: null,
@@ -136,53 +139,53 @@ export async function writeGameStorage(roomId: string, storage: JsonStorage, key
   })
 }
 
+/**
+ * Runs a plain-object mutator against the room's storage ATOMICALLY: the read,
+ * mutation, and write all happen inside a single Liveblocks `mutateStorage`
+ * transaction, so concurrent requests serialize instead of clobbering each other
+ * (the previous implementation was a separate read-then-write and lost updates).
+ *
+ * The mutator works on a normalized `JsonStorage` clone; only top-level keys that
+ * actually changed are written back. A mutator may return `{ skipWrite: true }`
+ * (reserved key) to suppress the write.
+ */
 export async function mutateGameStorage<T extends Record<string, any> | void>(
   roomId: string,
   mutator: (storage: JsonStorage) => T | Promise<T>,
 ): Promise<T> {
-  const storage = await readGameStorage(roomId)
+  let result!: T
+  await getLiveblocksServer().mutateStorage(liveblocksRoomId(roomId), async ({ root }) => {
+    const raw = root.toImmutable() as Partial<JsonStorage> | null
+    const snapshot = raw ?? {}
+    const storage: JsonStorage = JSON.parse(
+      JSON.stringify({
+        ...emptyStorage(snapshot.rules, snapshot.mapType),
+        ...snapshot,
+        players: snapshot.players ?? [],
+        properties: snapshot.properties ?? {},
+        log: snapshot.log ?? [],
+      }),
+    )
 
-  // Snapshot the initial state of each key using JSON serialization
-  const snapshot: Record<string, string> = {}
-  Object.entries(storage).forEach(([key, value]) => {
-    snapshot[key] = JSON.stringify(value)
-  })
-
-  const result = await mutator(storage)
-
-  // 'skipWrite' is a reserved key across all mutateGameStorage callers to prevent redundant writes
-  const skipWrite =
-    result &&
-    typeof result === 'object' &&
-    'skipWrite' in result &&
-    (result as any).skipWrite === true
-
-  if (!skipWrite) {
-    // Identify which keys actually changed
-    const changedKeys: string[] = []
+    const before: Record<string, string> = {}
     Object.entries(storage).forEach(([key, value]) => {
-      const currentStr = JSON.stringify(value)
-      if (snapshot[key] !== currentStr) {
-        changedKeys.push(key)
-      }
+      before[key] = JSON.stringify(value)
     })
 
-    if (changedKeys.length > 0) {
-      await writeGameStorage(roomId, storage, changedKeys)
-    }
-  }
-  return result
-}
+    result = await mutator(storage)
 
-export async function transactionalMutate<T>(
-  roomId: string,
-  mutator: (root: any) => T | Promise<T>
-): Promise<T> {
-  let result: T
-  await getLiveblocksServer().mutateStorage(liveblocksRoomId(roomId), async ({ root }) => {
-    result = await mutator(root)
+    // 'skipWrite' is a reserved key across all mutateGameStorage callers to prevent redundant writes
+    const skipWrite =
+      result && typeof result === 'object' && 'skipWrite' in result && (result as any).skipWrite === true
+    if (skipWrite) return
+
+    Object.entries(storage).forEach(([key, value]) => {
+      if (before[key] !== JSON.stringify(value)) {
+        root.set(key, value)
+      }
+    })
   })
-  return result!
+  return result
 }
 
 export async function broadcastRoomEvent(roomId: string, event: unknown): Promise<void> {
@@ -221,7 +224,9 @@ export function endTurn(storage: JsonStorage): void {
     return
   }
 
-  if (storage.lastRollWasDoubles) {
+  // Doubles grant another roll — but never for a player who was just jailed
+  // (going to jail forfeits the rest of the turn, even on doubles).
+  if (storage.lastRollWasDoubles && !currentPlayer?.inJail) {
     storage.lastRollWasDoubles = false
     const activePlayer = storage.players[storage.currentPlayerIndex]
     if (activePlayer) {
@@ -231,6 +236,7 @@ export function endTurn(storage: JsonStorage): void {
     storage.hasRolled = false
     return
   }
+  storage.lastRollWasDoubles = false
 
   let nextIndex = storage.currentPlayerIndex
   for (let attempt = 0; attempt < storage.players.length; attempt += 1) {
@@ -241,13 +247,14 @@ export function endTurn(storage: JsonStorage): void {
   storage.currentPlayerIndex = nextIndex
   storage.gamePhase = 'playing'
   storage.hasRolled = false
+  storage.consecutiveDoubles = 0
 }
 
 export function handlePostLanding(storage: JsonStorage): void {
-  if (storage.lastRollWasDoubles) {
+  const activePlayer = storage.players[storage.currentPlayerIndex]
+  if (storage.lastRollWasDoubles && !activePlayer?.inJail) {
     storage.lastRollWasDoubles = false
     storage.hasRolled = false
-    const activePlayer = storage.players[storage.currentPlayerIndex]
     if (activePlayer) {
       addLog(storage, `${activePlayer.username} gets another roll for rolling doubles!`)
     }

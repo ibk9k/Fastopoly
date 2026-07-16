@@ -18,16 +18,8 @@ type RollResponse = {
   dice: [number, number]
   newPosition: number
   passedGo: boolean
-}
-
-type LandResponse = {
   action: string
   amount?: number
-  property?: {
-    id: string
-    name: string
-    price?: number
-  }
 }
 
 type JailResponse = {
@@ -212,7 +204,8 @@ export default function Board() {
     }
   }
 
-  // Handle dice click to roll and land
+  // Handle dice click. The server resolves movement AND the landing (rent/card/tax)
+  // in one atomic call — the dice animation is purely visual and gates nothing.
   async function handleDiceClick() {
     if (!canRoll) return
 
@@ -228,14 +221,10 @@ export default function Board() {
         }
       } else {
         await postJson<RollResponse>('/api/game/roll', { roomId, playerId: selfPlayer?.id })
-
         await rollCompletePromise
-
-        // The server derives utility rent from its recorded roll; no client diceTotal.
-        await postJson<LandResponse>('/api/game/land', { roomId, playerId: selfPlayer?.id })
       }
     } catch (err) {
-      console.error('Failed to roll and land:', err)
+      console.error('Failed to roll:', err)
       rollCompleteResolverRef.current = null
     } finally {
       setIsRolling(false)

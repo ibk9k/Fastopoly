@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       // resolved (rent/card/tax) before the turn can end — this closes the skip-rent exploit.
       assertGamePhase(storage, 'playing')
       assertIsActivePlayer(storage, caller.id)
+      if (!storage.hasRolled) throw new Error('Roll before ending your turn')
       const activePlayer = storage.players[storage.currentPlayerIndex]
       if (activePlayer && activePlayer.cash < 0 && !activePlayer.isBankrupt) {
         throw new Error('Cannot end turn while in debt. Mortgage properties or declare bankruptcy.')

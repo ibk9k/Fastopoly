@@ -85,7 +85,7 @@ Auth: `liveblocks-auth`.
 
 Happy path: `lobby` →(`init`)→ `playing` →(`roll`)→ `landed` →(`land`)→ `playing` (or `buy_decision` on unowned property, or `auction`) →(`end-turn`)→ next player's `playing`. Win: `endTurn` sets `ended` when ≤1 non-bankrupt player remains.
 
-Note: `roll` and `land` are **two separate client calls** today. This split is the source of several bugs (see Pitfalls). Phase 3 merges landing resolution into `roll` server-side.
+**Phase 3:** `roll` resolves the landing (rent/card/tax/jail) in the same atomic call via `applyRoll` in `lib/game-engine/turn.ts` — the `/api/game/land` route no longer exists, and the dice animation is purely visual. Three consecutive doubles jail the roller; going to jail always forfeits the turn (doubles never re-arm for a jailed player). `end-turn` requires `playing` phase + `hasRolled`. Auction resolution (`resolveExpiredAuction` in turn.ts) is idempotent and callable by any seated player.
 
 ## Identity & reconnection
 
@@ -102,7 +102,7 @@ Server authority is enforced end-to-end (Phase 2A + 2B landed). Clients can neit
 - **Token issuance:** players claim-once via `POST /api/game/claim-token` (gated on seat + username, sets `player.tokenClaimed`); the token is returned to the client and stored in `localStorage` (`lib/game-client/tokens.ts`), never written to Storage. The host token is issued by `POST /api/lobby/create`. Client-side, `postJson` (in `components/game/helpers.ts`) auto-attaches the right token based on the request body (lazy-claiming the player token if missing).
 - **Liveblocks access = `READ_ACCESS`** (`app/api/liveblocks-auth/route.ts`): the issued token grants `["room:read", "room:presence:write"]` only — clients read Storage and write their own presence, but **direct Storage writes are rejected by the Liveblocks server**. All mutations must go through the token-guarded routes. Consequences that are load-bearing: (1) storage is **server-seeded** at room creation via `seedLobbyStorage` in `server-state.ts` (`createRoom` + `initializeStorageDocument`), since the client can't bootstrap it; (2) lobby settings changes go through `POST /api/game/lobby-settings` (host-only), not client `useMutation`; (3) ready/turn/username are **presence** (still client-writable), not Storage.
 - **Residual risk:** the claim is gated on the username, which is public in Storage — an attacker who claims a seat before its legit player could take it (accounts are out of scope; Phase 7 adds host seat-recovery). Documented in `claim-token/route.ts`.
-- Only `buy` is race-safe (`transactionalMutate`). All other routes use non-atomic `mutateGameStorage` → concurrent requests can lose updates (TOCTOU). **This is now the top remaining security/correctness gap — Phase 3.**
+- **All mutations are atomic (Phase 3):** `mutateGameStorage` now runs its read-mutate-diff-write cycle inside a single Liveblocks `mutateStorage` transaction, so concurrent requests serialize (no more lost updates). `transactionalMutate` was deleted; every route uses the same executor.
 
 ## Known pitfalls (bug inventory — being fixed by phase)
 

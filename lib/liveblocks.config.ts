@@ -118,6 +118,8 @@ export type Storage = {
   houseSupply?: number
   hotelSupply?: number
   lastRollWasDoubles?: boolean
+  /** Consecutive doubles rolled this turn — the third sends the roller to jail. */
+  consecutiveDoubles?: number
   auctionPropertyId?: string | null
   auctionBids?: AuctionBid[]
   auctionHighestBid?: number

@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getTile } from '@/lib/game-engine/board'
-import { useOthers, useSelf, useStorage } from '@/lib/liveblocks.config'
+import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import { colorForGroup, formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
 
 type AuctionPanelProps = {
@@ -13,26 +13,13 @@ type AuctionPanelProps = {
 
 export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
   const self = useSelf()
-  const others = useOthers()
+
   const storedPlayers = useStorage((root) => root.players)
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
 
-  // The auto-resolver is the lowest-connectionId client that actually holds a seat (and
-  // therefore a token). Electing among seated connections avoids a spectator stalling the
-  // auction now that auction-resolve requires a player token. (Phase 3 replaces this with
-  // server-side lazy resolution.)
-  const isResponsible = useMemo(() => {
-    if (!self || typeof self.connectionId !== 'number') return false
-    const connections = [
-      { connectionId: self.connectionId, presence: self.presence },
-      ...others.map((o) => ({ connectionId: o.connectionId, presence: o.presence })),
-    ]
-    const seatedIds = connections
-      .filter((c) => typeof c.connectionId === 'number' && Boolean(resolveLocalPlayer(players, c)))
-      .map((c) => c.connectionId as number)
-      .sort((a, b) => a - b)
-    return seatedIds.length > 0 && self.connectionId === seatedIds[0]
-  }, [self, others, players])
+  // Any seated client fires resolution when the timer expires — the server-side
+  // resolver is idempotent and atomic, so concurrent calls are safe, and the
+  // auction can no longer stall because one elected client disconnected.
   
   const auctionPropertyId = useStorage((root) => root.auctionPropertyId)
   const storedAuctionBids = useStorage((root) => root.auctionBids)
@@ -66,7 +53,6 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
       auctionEndTime > 0 &&
       currentTime >= auctionEndTime &&
       gamePhase === 'auction' &&
-      isResponsible &&
       !resolving &&
       auctionPropertyId &&
       selfPlayer
@@ -76,7 +62,7 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
         .catch((err) => console.error('Failed to auto-resolve auction:', err))
         .finally(() => setResolving(false))
     }
-  }, [currentTime, auctionEndTime, gamePhase, resolving, roomId, auctionPropertyId, isResponsible, selfPlayer])
+  }, [currentTime, auctionEndTime, gamePhase, resolving, roomId, auctionPropertyId, selfPlayer])
 
   const timeRemaining = Math.max(0, Math.ceil((auctionEndTime - currentTime) / 1000))
   const isExpired = timeRemaining <= 0

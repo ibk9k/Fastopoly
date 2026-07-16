@@ -79,18 +79,14 @@ describe('handlePostLanding', () => {
   })
 })
 
-describe('known bug: go-to-jail on doubles grants an extra roll', () => {
-  // BUG(Phase 3): landing on Go-To-Jail routes through endTurn, which still sees lastRollWasDoubles
-  // and re-arms the roll — the jailed player wrongly gets to roll again. Documenting current behavior.
-  it('CURRENTLY re-arms the roll for a player who was just jailed on doubles', () => {
+describe('go-to-jail on doubles forfeits the turn (fixed in Phase 3)', () => {
+  it('advances to the next player instead of re-arming the roll', () => {
     const p0 = makePlayer({ id: 'player-0', position: 30 })
     const p1 = makePlayer({ id: 'player-1' })
     const storage = makeStorage({ players: [p0, p1], currentPlayerIndex: 0, lastRollWasDoubles: true, hasRolled: true })
     resolveLanding(storage, p0)
     expect(p0.inJail).toBe(true)
-    expect(storage.currentPlayerIndex).toBe(0) // still their turn
-    expect(storage.hasRolled).toBe(false) // wrongly re-armed
+    expect(storage.currentPlayerIndex).toBe(1) // turn passed — jail overrides doubles
+    expect(storage.lastRollWasDoubles).toBe(false)
   })
-
-  it.todo('going to jail must forfeit the remainder of the turn even on doubles — Phase 3')
 })

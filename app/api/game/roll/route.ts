@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, rollDice, routeError } from '@/lib/game-engine/route-utils'
-import { addLog, broadcastRoomEvent, mutateGameStorage } from '@/lib/game-engine/server-state'
+import { broadcastRoomEvent, mutateGameStorage } from '@/lib/game-engine/server-state'
+import { applyRoll } from '@/lib/game-engine/turn'
+import type { RoomEvent } from '@/lib/liveblocks.config'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,33 +12,22 @@ export async function POST(req: NextRequest) {
     if (!roomId || !playerId) return badRequest('Missing roomId or playerId')
     const token = readPlayerToken(req)
 
+    const events: RoomEvent[] = []
     const result = await mutateGameStorage(roomId, (storage) => {
       const caller = authenticatePlayer(storage, roomId, playerId, token)
       assertGamePhase(storage, 'playing')
       assertIsActivePlayer(storage, caller.id)
       if (storage.hasRolled) throw new Error('You have already rolled this turn')
-      
-      const player = storage.players[storage.currentPlayerIndex]
-      const dice = rollDice()
-      const isDoubles = dice[0] === dice[1]
-      storage.lastRollWasDoubles = isDoubles
-      storage.lastDiceRoll = { d1: dice[0], d2: dice[1], timestamp: Date.now() }
-      storage.hasRolled = true
+      if (caller.inJail) throw new Error('You are in jail — use a jail action to roll')
 
-      const total = dice[0] + dice[1]
-      const nextPosition = (player.position + total) % 40
-      const passedGo = nextPosition < player.position
-      player.position = nextPosition
-      if (passedGo) player.cash += 200
-      if (nextPosition === 30) {
-        storage.lastRollWasDoubles = false
-      }
-      storage.gamePhase = 'landed'
-      addLog(storage, `${player.username} rolled ${dice[0]} and ${dice[1]}.`)
-      return { dice, newPosition: player.position, passedGo }
+      // Movement AND landing resolution happen in this one transaction: there is no
+      // separate /land call to replay, skip, or lose to a disconnect.
+      const [d1, d2] = rollDice()
+      return applyRoll(storage, d1, d2, events)
     })
 
     await broadcastRoomEvent(roomId, { type: 'DICE_ROLLED', playerId, dice: result.dice })
+    await Promise.all(events.map((event) => broadcastRoomEvent(roomId, event)))
     return NextResponse.json(result)
   } catch (error) {
     return routeError(error, 'Roll failed')

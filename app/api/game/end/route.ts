@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateScores } from '@/lib/game-engine/scoring'
+import type { PlayerResult } from '@/lib/game-engine/scoring'
 import { authenticateHost, readPlayerToken } from '@/lib/game-engine/auth'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
-import { readGameStorage, propertyMap, writeGameStorage } from '@/lib/game-engine/server-state'
+import { mutateGameStorage, propertyMap } from '@/lib/game-engine/server-state'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
@@ -11,9 +12,12 @@ export async function POST(req: NextRequest) {
     if (!roomId) return badRequest('Missing roomId')
     authenticateHost(roomId, readPlayerToken(req))
 
-    const storage = await readGameStorage(roomId)
-    const properties = propertyMap(storage.properties)
-    const results = calculateScores(storage.players, properties)
+    let results: PlayerResult[] = []
+    await mutateGameStorage(roomId, (storage) => {
+      results = calculateScores(storage.players, propertyMap(storage.properties))
+      storage.gamePhase = 'ended'
+      storage.winnerIds = results.filter((result) => result.placement === 1).map((result) => result.playerId)
+    })
 
     await supabaseAdmin.from('game_results').insert(
       results.map((result) => ({
@@ -43,9 +47,6 @@ export async function POST(req: NextRequest) {
       }),
     )
 
-    storage.gamePhase = 'ended'
-    storage.winnerIds = results.filter((result) => result.placement === 1).map((result) => result.playerId)
-    await writeGameStorage(roomId, storage)
     await supabaseAdmin.from('public_rooms').update({ status: 'finished' }).eq('id', roomId)
 
     return NextResponse.json({ results })
