@@ -28,7 +28,7 @@ export default function BankruptcyOverlay() {
   const player = players.find((candidate) => candidate.id === notice.playerId)
 
   return (
-    <div className="fixed left-0 right-0 top-12 z-40 px-4">
+    <div className="fixed left-0 right-0 top-12 z-toast px-4">
       <div
         className="mx-auto max-w-4xl rounded-md border-2 bg-[#F7F0E4]/95 px-5 py-3 text-center font-black text-zinc-900 shadow-2xl transition-opacity"
         style={{ borderColor: player?.color ?? '#d28b7a' }}

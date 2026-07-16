@@ -38,7 +38,7 @@ export function TileTooltip({ tile }: { tile: Tile }) {
     (tile.tax ? `Pay ${formatMoney(tile.tax)} tax.` : tile.name)
 
   return (
-    <div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-[#d28b7a] bg-[#EFA38F] px-3 py-1.5 text-xs font-semibold text-zinc-900 shadow-xl">
+    <div className="absolute bottom-full left-1/2 z-panel mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-[#d28b7a] bg-[#EFA38F] px-3 py-1.5 text-xs font-semibold text-zinc-900 shadow-xl">
       {desc}
       <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[#d28b7a]" />
     </div>
@@ -146,7 +146,7 @@ export default function PropertyDetailModal({
   const groupColor = colorForGroup(tile.colorGroup)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900" onClick={onClose}>
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900" onClick={onClose}>
       <div
         className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#d28b7a] bg-[#F7F0E4] shadow-2xl"
         onClick={(e) => e.stopPropagation()}

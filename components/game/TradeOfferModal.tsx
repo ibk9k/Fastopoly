@@ -78,13 +78,13 @@ export default function TradeOfferModal({ roomId }: TradeOfferModalProps) {
   return (
     <>
       {toast ? (
-        <div className="fixed right-4 top-16 z-40 max-w-sm rounded-md border border-[#d28b7a] bg-[#EFA38F] px-4 py-3 text-sm font-semibold text-zinc-900 shadow-2xl">
+        <div className="fixed right-4 top-16 z-toast max-w-sm rounded-md border border-[#d28b7a] bg-[#EFA38F] px-4 py-3 text-sm font-semibold text-zinc-900 shadow-2xl">
           {toast.from} offered a trade to {toast.to}
         </div>
       ) : null}
 
       {tradeOffer && isRecipient ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
           <section className="w-full max-w-2xl rounded-lg border border-[#d28b7a] bg-[#F7F0E4] p-5 shadow-2xl">
             <div>
               <p className="text-sm uppercase tracking-[0.18em] text-zinc-700 font-bold">Trade offer</p>

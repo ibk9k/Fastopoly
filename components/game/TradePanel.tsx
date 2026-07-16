@@ -136,7 +136,7 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
       <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-[#d28b7a] bg-[#F7F0E4] p-5 shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

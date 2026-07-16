@@ -114,13 +114,9 @@ export default function HomePage() {
         </button>
 
         <Link
-          href="/shop"
-          className="mt-4 w-full max-w-xs rounded-xl border-2 border-[#2f4d20]/25 bg-white px-8 py-3 text-sm font-bold text-[#2f4d20] tracking-wide uppercase transition hover:border-[#2f4d20]/50 active:scale-95 shadow-sm text-center"
+          href="/leaderboard"
+          className="mt-4 w-full max-w-xs rounded-xl border-2 border-pine/25 bg-white px-8 py-3 text-center text-sm font-bold uppercase tracking-wide text-pine shadow-sm transition hover:border-pine/50 active:scale-95"
         >
-          Shop
-        </Link>
-        
-        <Link href="/leaderboard" className="mt-6 text-xs font-black uppercase tracking-wider text-[#2f4d20]/60 hover:text-[#2f4d20] transition-colors">
           Leaderboard
         </Link>
       </section>
