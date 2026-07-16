@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { GameRules } from '@/lib/liveblocks.config'
 import { setStoredHostToken } from '@/lib/game-client/tokens'
+import Button from '@/components/ui/Button'
+import PropertyStrip from '@/components/ui/PropertyStrip'
 
 const createCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 5)
 
@@ -14,6 +16,9 @@ const maps = [
   { id: '13x13', title: '13x13', detail: 'Expanded board', enabled: false },
   { id: 'double-path', title: 'Double Path', detail: 'Branching routes', enabled: false },
 ]
+
+const selectClass =
+  'rounded-md border-2 border-salmon-line/40 bg-white/40 px-3 py-2 text-sm font-bold text-pine outline-none focus:border-pine'
 
 export default function HostLobbyPage() {
   const router = useRouter()
@@ -67,60 +72,67 @@ export default function HostLobbyPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] px-6 py-10 text-white">
-      <div className="mx-auto max-w-6xl">
-        <h1 className="text-4xl font-bold">Host a game</h1>
+    <main className="relative min-h-screen bg-parchment px-6 py-12 text-pine">
+      <PropertyStrip position="top" />
+      <div className="mx-auto max-w-4xl">
+        <h1 className="font-display text-4xl uppercase tracking-wide text-pine">Host a game</h1>
 
         <section className="mt-8">
-          <h2 className="text-lg font-semibold text-zinc-200">Map</h2>
+          <h2 className="text-sm font-extrabold uppercase tracking-widest text-pine/70">Map</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {maps.map((map) => (
               <button
                 key={map.id}
                 disabled={!map.enabled}
                 onClick={() => setMapType(map.id)}
-                className={`min-h-32 rounded-lg border p-5 text-left transition ${
-                  mapType === map.id ? 'border-emerald-500 bg-[#102b1b]' : 'border-zinc-800 bg-zinc-950'
-                } ${map.enabled ? 'hover:border-emerald-700' : 'cursor-not-allowed opacity-50'}`}
+                className={`min-h-28 rounded-lg border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-pine ${
+                  mapType === map.id
+                    ? 'border-pine bg-felt/50 shadow-card'
+                    : 'border-salmon-line/40 bg-parchment-raised'
+                } ${map.enabled ? 'hover:border-pine/60' : 'cursor-not-allowed opacity-50'}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-bold">{map.title}</h3>
-                    <p className="mt-1 text-sm text-zinc-400">{map.detail}</p>
+                    <h3 className="font-extrabold">{map.title}</h3>
+                    <p className="mt-1 text-sm font-semibold text-pine/60">{map.detail}</p>
                   </div>
-                  {!map.enabled ? <span className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">Coming soon</span> : null}
+                  {!map.enabled ? (
+                    <span className="rounded bg-pine/10 px-2 py-1 text-[10px] font-bold uppercase text-pine/60">
+                      Soon
+                    </span>
+                  ) : null}
                 </div>
               </button>
             ))}
           </div>
         </section>
 
-        <section className="mt-10 max-w-2xl rounded-lg border border-zinc-800 bg-zinc-950 p-6">
-          <h2 className="text-lg font-semibold text-zinc-200">Rules</h2>
-          <div className="mt-5 grid gap-5">
-            <label className="flex items-center justify-between gap-4">
-              <span className="text-zinc-300">Starting cash</span>
-              <select value={startingCash} onChange={(event) => setStartingCash(Number(event.target.value))} className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2">
+        <section className="mt-10 max-w-2xl rounded-lg border-2 border-salmon-line/50 bg-salmon p-6 shadow-card">
+          <h2 className="text-sm font-extrabold uppercase tracking-widest text-zinc-800">Rules</h2>
+          <div className="mt-5 grid gap-5 text-zinc-900">
+            <label className="flex items-center justify-between gap-4 font-bold">
+              <span>Starting cash</span>
+              <select value={startingCash} onChange={(event) => setStartingCash(Number(event.target.value))} className={selectClass}>
                 <option value={1000}>$1000</option>
                 <option value={1500}>$1500</option>
                 <option value={2000}>$2000</option>
               </select>
             </label>
-            <label className="flex items-center justify-between gap-4">
-              <span className="text-zinc-300">Free Parking jackpot</span>
-              <input type="checkbox" checked={freeParkingJackpot} onChange={(event) => setFreeParkingJackpot(event.target.checked)} className="h-5 w-5 accent-emerald-700" />
+            <label className="flex items-center justify-between gap-4 font-bold">
+              <span>Free Parking jackpot</span>
+              <input type="checkbox" checked={freeParkingJackpot} onChange={(event) => setFreeParkingJackpot(event.target.checked)} className="h-5 w-5 accent-pine" />
             </label>
-            <label className="flex items-center justify-between gap-4">
-              <span className="text-zinc-300">Auction on pass</span>
-              <input type="checkbox" checked={auctionOnPass} onChange={(event) => setAuctionOnPass(event.target.checked)} className="h-5 w-5 accent-emerald-700" />
+            <label className="flex items-center justify-between gap-4 font-bold">
+              <span>Auction on pass</span>
+              <input type="checkbox" checked={auctionOnPass} onChange={(event) => setAuctionOnPass(event.target.checked)} className="h-5 w-5 accent-pine" />
             </label>
-            <label className="flex items-center justify-between gap-4">
-              <span className="text-zinc-300">Speed die</span>
-              <input type="checkbox" checked={speedDie} onChange={(event) => setSpeedDie(event.target.checked)} className="h-5 w-5 accent-emerald-700" />
+            <label className="flex items-center justify-between gap-4 font-bold">
+              <span>Speed die</span>
+              <input type="checkbox" checked={speedDie} onChange={(event) => setSpeedDie(event.target.checked)} className="h-5 w-5 accent-pine" />
             </label>
-            <label className="flex items-center justify-between gap-4">
-              <span className="text-zinc-300">Max players</span>
-              <select value={maxPlayers} onChange={(event) => setMaxPlayers(Number(event.target.value))} className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2">
+            <label className="flex items-center justify-between gap-4 font-bold">
+              <span>Max players</span>
+              <select value={maxPlayers} onChange={(event) => setMaxPlayers(Number(event.target.value))} className={selectClass}>
                 <option value={2}>2</option>
                 <option value={3}>3</option>
                 <option value={4}>4</option>
@@ -129,11 +141,16 @@ export default function HostLobbyPage() {
           </div>
         </section>
 
-        {error ? <p className="mt-5 text-sm text-red-400">{error}</p> : null}
-        <button onClick={createRoom} disabled={creating} className="mt-8 rounded-md bg-[#1a472a] px-8 py-4 font-bold transition hover:bg-[#235d38] disabled:cursor-wait disabled:opacity-60">
-          {creating ? 'Creating...' : 'Create room'}
-        </button>
+        {error ? (
+          <p className="mt-5 rounded-md border border-danger-line bg-danger-surface px-3 py-2 text-sm font-bold text-danger">
+            {error}
+          </p>
+        ) : null}
+        <Button onClick={createRoom} loading={creating} size="lg" className="mt-8">
+          {creating ? 'Creating…' : 'Create room'}
+        </Button>
       </div>
+      <PropertyStrip position="bottom" />
     </main>
   )
 }

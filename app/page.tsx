@@ -5,20 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { customAlphabet } from 'nanoid'
 import { setStoredHostToken } from '@/lib/game-client/tokens'
+import PropertyStrip from '@/components/ui/PropertyStrip'
 
 const usernameKey = 'fastopoly_username'
 const createCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 5)
-
-const pastelColors = [
-  '#C2A691', // Brown
-  '#A8DADC', // Light Blue
-  '#F1A7C4', // Pink
-  '#FBC490', // Orange
-  '#E5989B', // Red
-  '#F9E076', // Yellow
-  '#A3C9A8', // Green
-  '#90B0D9', // Dark Blue
-]
 
 export default function HomePage() {
   const router = useRouter()
@@ -107,15 +97,10 @@ export default function HomePage() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center bg-[#F7F0E4] px-6 text-zinc-900 overflow-hidden font-sans">
-      {/* Top pastel property strip */}
-      <div className="absolute top-0 left-0 right-0 flex h-3 shadow-sm z-10">
-        {pastelColors.map((color, idx) => (
-          <div key={`top-${idx}`} className="flex-1" style={{ backgroundColor: color }} />
-        ))}
-      </div>
+      <PropertyStrip position="top" />
 
       <section className="flex w-full max-w-xl flex-col items-center text-center py-16 z-0">
-        <h1 className="text-6xl font-black tracking-normal sm:text-7xl text-[#2f4d20] drop-shadow-sm uppercase">Fastopoly</h1>
+        <h1 className="font-display text-6xl tracking-normal sm:text-7xl text-pine drop-shadow-sm uppercase">Fastopoly</h1>
         <p className="mt-4 text-lg font-bold text-[#2f4d20]/75">Play with friends, anywhere</p>
         
         {error ? <p className="mt-4 text-sm font-black text-rose-700">{error}</p> : null}
@@ -140,12 +125,7 @@ export default function HomePage() {
         </Link>
       </section>
 
-      {/* Bottom pastel property strip */}
-      <div className="absolute bottom-0 left-0 right-0 flex h-3 shadow-inner z-10">
-        {pastelColors.map((color, idx) => (
-          <div key={`bottom-${idx}`} className="flex-1" style={{ backgroundColor: color }} />
-        ))}
-      </div>
+      <PropertyStrip position="bottom" />
 
       {/* Light-themed Name Modal */}
       {showNameModal ? (
