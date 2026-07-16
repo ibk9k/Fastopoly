@@ -35,6 +35,8 @@ export type Player = {
   ownedColorGroups?: string[]
   hasBuiltHotel?: boolean
   bankruptciesCaused?: number
+  /** Set true once this seat's HMAC token has been claimed (claim-once). Never holds the token itself. */
+  tokenClaimed?: boolean
 }
 
 export type Property = {

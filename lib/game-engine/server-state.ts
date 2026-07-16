@@ -9,7 +9,8 @@ type StorageRoot = {
 
 type LiveblocksStorageClient = {
   getStorageDocument: (roomId: string, format: 'json') => Promise<JsonStorage | null>
-  initializeStorageDocument: (roomId: string, storage: JsonStorage) => Promise<void>
+  initializeStorageDocument: (roomId: string, document: unknown) => Promise<unknown>
+  createRoom: (roomId: string, params: { defaultAccesses: string[] }) => Promise<unknown>
   mutateStorage: (roomId: string, callback: (context: { root: StorageRoot }) => void | Promise<void>) => Promise<void>
   broadcastEvent?: (roomId: string, event: unknown) => Promise<void>
 }
@@ -77,6 +78,53 @@ export async function readGameStorage(roomId: string): Promise<JsonStorage> {
 
 export async function initializeGameStorage(roomId: string, storage: JsonStorage): Promise<void> {
   await getLiveblocksServer().initializeStorageDocument(liveblocksRoomId(roomId), storage)
+}
+
+/**
+ * Server-seeds a fresh room's Liveblocks storage at creation time, so clients never
+ * need write access to bootstrap it (a prerequisite for READ_ACCESS — see Phase 2B).
+ * Uses the documented createRoom + initializeStorageDocument (LSON) path. `players` and
+ * `log` are LiveLists; everything else is plain JSON. Safe here because no user is
+ * connected yet at creation (initializeStorageDocument would otherwise disconnect them).
+ */
+export async function seedLobbyStorage(roomId: string, rules: GameRules, mapType = 'classic'): Promise<void> {
+  const client = getLiveblocksServer()
+  const rid = liveblocksRoomId(roomId)
+
+  try {
+    await client.createRoom(rid, { defaultAccesses: [] })
+  } catch {
+    // Room may already exist (e.g. a retry) — initializeStorageDocument below still guards emptiness.
+  }
+
+  const document = {
+    liveblocksType: 'LiveObject',
+    data: {
+      gamePhase: 'lobby',
+      currentPlayerIndex: 0,
+      players: { liveblocksType: 'LiveList', data: [] },
+      properties: {},
+      bank: 20580,
+      freeParkingPool: 0,
+      chanceIndex: 0,
+      communityChestIndex: 0,
+      tradeOffer: null,
+      log: { liveblocksType: 'LiveList', data: [] },
+      rules: { ...rules },
+      mapType,
+      winnerIds: [],
+      houseSupply: 32,
+      hotelSupply: 12,
+      lastRollWasDoubles: false,
+      lastDiceRoll: { d1: 3, d2: 4, timestamp: 0 },
+      auctionHighestBid: 0,
+      auctionHighestBidderId: null,
+      auctionEndTime: 0,
+      hasRolled: false,
+    },
+  }
+
+  await client.initializeStorageDocument(rid, document)
 }
 
 export async function writeGameStorage(roomId: string, storage: JsonStorage, keys?: string[]): Promise<void> {

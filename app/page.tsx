@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { customAlphabet } from 'nanoid'
+import { setStoredHostToken } from '@/lib/game-client/tokens'
 
 const usernameKey = 'fastopoly_username'
 const createCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 5)
@@ -87,12 +88,16 @@ export default function HomePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roomCode, username: savedUsername, mapType: 'classic', rules, isPublic: true }),
     })
-    const result = (await response.json()) as { roomCode?: string; error?: string }
+    const result = (await response.json()) as { roomCode?: string; hostToken?: string; error?: string }
     setCreating(false)
 
     if (!response.ok || !result.roomCode) {
       setError(result.error ?? 'Could not create room')
       return
+    }
+
+    if (result.hostToken) {
+      setStoredHostToken(result.roomCode, result.hostToken)
     }
 
     sessionStorage.setItem('fastopoly_rules', JSON.stringify(rules))

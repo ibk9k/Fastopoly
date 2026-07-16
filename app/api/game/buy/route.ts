@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { nanoid } from 'nanoid'
 import { getTile } from '@/lib/game-engine/board'
+import { AuthError, readPlayerToken, verifyToken } from '@/lib/game-engine/auth'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { transactionalMutate } from '@/lib/game-engine/server-state'
 
@@ -8,6 +9,8 @@ export async function POST(req: NextRequest) {
   try {
     const { roomId, playerId, propertyId } = (await req.json()) as { roomId?: string; playerId?: string; propertyId?: string }
     if (!roomId || !playerId || !propertyId) return badRequest('Missing buy fields')
+    // This route mutates the LiveObject root directly, so token verification happens up front.
+    if (!verifyToken(roomId, playerId, readPlayerToken(req))) throw new AuthError('Invalid player token')
 
     const result = await transactionalMutate(roomId, (root) => {
       // 1. Validate game phase

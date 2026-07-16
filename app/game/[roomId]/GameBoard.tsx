@@ -11,11 +11,11 @@ import PlayerDashboard from '@/components/game/PlayerDashboard'
 import PropertyManager from '@/components/game/PropertyManager'
 import TradeOfferModal from '@/components/game/TradeOfferModal'
 import TradePanel from '@/components/game/TradePanel'
-import { resolveLocalPlayer, formatMoney } from '@/components/game/helpers'
+import { resolveLocalPlayer, formatMoney, postJson } from '@/components/game/helpers'
+import { ensurePlayerToken } from '@/lib/game-client/tokens'
 import {
   useSelf,
   useStorage,
-  useMutation,
   useOthers,
   useUpdateMyPresence,
 } from '@/lib/liveblocks.config'
@@ -57,6 +57,15 @@ export default function GameBoard() {
   const [starting, setStarting] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // Claim this seat's action token once the game has started and our player is resolved.
+  // postJson lazy-claims too, but doing it here eagerly avoids a race on the very first action.
+  const selfPlayerId = selfPlayer?.id
+  const selfUsername = self?.presence?.username
+  useEffect(() => {
+    if (gamePhase === 'lobby' || !selfPlayerId || !selfUsername) return
+    void ensurePlayerToken(roomId, selfPlayerId, selfUsername)
+  }, [gamePhase, selfPlayerId, selfUsername, roomId])
+
   // Sync isPublic status from Supabase
   useEffect(() => {
     async function loadRoomVisibility() {
@@ -94,25 +103,19 @@ export default function GameBoard() {
   const isHost = connectedPlayers.some((player) => player.isHost && player.isSelf)
   const canStart = connectedPlayers.length >= 1 && connectedPlayers.every((player) => player.isReady)
 
-  // Liveblocks mutations to update settings
-  const updateRule = useMutation(({ storage }, key: keyof GameRules, value: any) => {
-    const currentRules = storage.get('rules')
-    if (currentRules) {
-      if (typeof (currentRules as any).set === 'function') {
-        (currentRules as any).set(key, value)
-      } else {
-        storage.set('rules', { ...storage.get('rules'), [key]: value })
-      }
-    }
-  }, [])
+  // Host-only lobby settings now round-trip through a server route (READ_ACCESS forbids
+  // client storage writes). The change syncs back to every client via Liveblocks storage.
+  function updateRule(key: keyof GameRules, value: GameRules[keyof GameRules]) {
+    void postJson('/api/game/lobby-settings', { roomId, rulesPatch: { [key]: value } }).catch((err) =>
+      console.error('Failed to update rule:', err),
+    )
+  }
 
-  const updateMapType = useMutation(({ storage }, value: string) => {
-    storage.set('mapType', value)
-  }, [])
-
-  const setPlaying = useMutation(({ storage }) => {
-    storage.set('gamePhase', 'playing')
-  }, [])
+  function updateMapType(value: string) {
+    void postJson('/api/game/lobby-settings', { roomId, mapType: value }).catch((err) =>
+      console.error('Failed to update map:', err),
+    )
+  }
 
   async function togglePublic(nextPublic: boolean) {
     if (!isHost) return
@@ -144,13 +147,16 @@ export default function GameBoard() {
       bankruptciesCaused: 0,
     }))
 
-    setPlaying()
-    await fetch('/api/game/init', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId, players: playersToInit, rules: rules as GameRules, mapType: mapType ?? 'classic' }),
-    })
-    setStarting(false)
+    try {
+      // postJson attaches the host token (stored at room creation) for this host-only route.
+      // init sets gamePhase='playing' server-side, so no optimistic client write is needed
+      // (and an optimistic write would trip init's no-clobber guard).
+      await postJson('/api/game/init', { roomId, players: playersToInit, rules: rules as GameRules, mapType: mapType ?? 'classic' })
+    } catch (err) {
+      console.error('Failed to start game:', err)
+    } finally {
+      setStarting(false)
+    }
   }
 
   async function copyRoomCode() {

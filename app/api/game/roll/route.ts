@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, rollDice, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, broadcastRoomEvent, mutateGameStorage } from '@/lib/game-engine/server-state'
@@ -7,10 +8,12 @@ export async function POST(req: NextRequest) {
   try {
     const { roomId, playerId } = (await req.json()) as { roomId?: string; playerId?: string }
     if (!roomId || !playerId) return badRequest('Missing roomId or playerId')
+    const token = readPlayerToken(req)
 
     const result = await mutateGameStorage(roomId, (storage) => {
+      const caller = authenticatePlayer(storage, roomId, playerId, token)
       assertGamePhase(storage, 'playing')
-      assertIsActivePlayer(storage, playerId)
+      assertIsActivePlayer(storage, caller.id)
       if (storage.hasRolled) throw new Error('You have already rolled this turn')
       
       const player = storage.players[storage.currentPlayerIndex]

@@ -17,14 +17,22 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
   const storedPlayers = useStorage((root) => root.players)
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
 
+  // The auto-resolver is the lowest-connectionId client that actually holds a seat (and
+  // therefore a token). Electing among seated connections avoids a spectator stalling the
+  // auction now that auction-resolve requires a player token. (Phase 3 replaces this with
+  // server-side lazy resolution.)
   const isResponsible = useMemo(() => {
     if (!self || typeof self.connectionId !== 'number') return false
-    const activeIds = [
-      self.connectionId,
-      ...others.map((o) => o.connectionId).filter((id): id is number => typeof id === 'number'),
-    ].sort((a, b) => a - b)
-    return self.connectionId === activeIds[0]
-  }, [self, others])
+    const connections = [
+      { connectionId: self.connectionId, presence: self.presence },
+      ...others.map((o) => ({ connectionId: o.connectionId, presence: o.presence })),
+    ]
+    const seatedIds = connections
+      .filter((c) => typeof c.connectionId === 'number' && Boolean(resolveLocalPlayer(players, c)))
+      .map((c) => c.connectionId as number)
+      .sort((a, b) => a - b)
+    return seatedIds.length > 0 && self.connectionId === seatedIds[0]
+  }, [self, others, players])
   
   const auctionPropertyId = useStorage((root) => root.auctionPropertyId)
   const storedAuctionBids = useStorage((root) => root.auctionBids)
@@ -60,14 +68,15 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
       gamePhase === 'auction' &&
       isResponsible &&
       !resolving &&
-      auctionPropertyId
+      auctionPropertyId &&
+      selfPlayer
     ) {
       setResolving(true)
-      postJson('/api/game/auction-resolve', { roomId })
+      postJson('/api/game/auction-resolve', { roomId, playerId: selfPlayer.id })
         .catch((err) => console.error('Failed to auto-resolve auction:', err))
         .finally(() => setResolving(false))
     }
-  }, [currentTime, auctionEndTime, gamePhase, resolving, roomId, auctionPropertyId, isResponsible])
+  }, [currentTime, auctionEndTime, gamePhase, resolving, roomId, auctionPropertyId, isResponsible, selfPlayer])
 
   const timeRemaining = Math.max(0, Math.ceil((auctionEndTime - currentTime) / 1000))
   const isExpired = timeRemaining <= 0

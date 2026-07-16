@@ -107,8 +107,9 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, pla
   }
 
   async function endTurn() {
+    if (!selfPlayer) return
     await runWithBusy('end-turn', async () => {
-      await postJson<BasicResponse>('/api/game/end-turn', { roomId })
+      await postJson<BasicResponse>('/api/game/end-turn', { roomId, playerId: selfPlayer.id })
       setAuctionPropertyId(null)
       setMessage('Turn ended.')
     })

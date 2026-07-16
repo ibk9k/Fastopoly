@@ -203,7 +203,7 @@ export default function Board() {
       if (gamePhase === 'buy_decision') {
         await postJson('/api/game/pass-purchase', { roomId, playerId: selfPlayer.id })
       } else {
-        await postJson('/api/game/end-turn', { roomId })
+        await postJson('/api/game/end-turn', { roomId, playerId: selfPlayer.id })
       }
     } catch (err) {
       console.error('Failed to end turn:', err)
@@ -227,13 +227,12 @@ export default function Board() {
           rollCompleteResolverRef.current = null
         }
       } else {
-        const rollRes = await postJson<RollResponse>('/api/game/roll', { roomId, playerId: selfPlayer?.id })
-        const [d1, d2] = rollRes.dice
+        await postJson<RollResponse>('/api/game/roll', { roomId, playerId: selfPlayer?.id })
 
         await rollCompletePromise
 
-        const diceTotal = d1 + d2
-        await postJson<LandResponse>('/api/game/land', { roomId, playerId: selfPlayer?.id, diceTotal })
+        // The server derives utility rent from its recorded roll; no client diceTotal.
+        await postJson<LandResponse>('/api/game/land', { roomId, playerId: selfPlayer?.id })
       }
     } catch (err) {
       console.error('Failed to roll and land:', err)

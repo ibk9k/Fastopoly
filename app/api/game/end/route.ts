@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateScores } from '@/lib/game-engine/scoring'
+import { authenticateHost, readPlayerToken } from '@/lib/game-engine/auth'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { readGameStorage, propertyMap, writeGameStorage } from '@/lib/game-engine/server-state'
 import { supabaseAdmin } from '@/lib/supabase/server'
@@ -8,6 +9,7 @@ export async function POST(req: NextRequest) {
   try {
     const { roomId } = (await req.json()) as { roomId?: string }
     if (!roomId) return badRequest('Missing roomId')
+    authenticateHost(roomId, readPlayerToken(req))
 
     const storage = await readGameStorage(roomId)
     const properties = propertyMap(storage.properties)

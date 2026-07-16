@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTile } from '@/lib/game-engine/board'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
+import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
 
@@ -12,14 +14,17 @@ export async function POST(req: NextRequest) {
       action?: 'mortgage' | 'unmortgage' | 'sell'
     }
     if (!roomId || !playerId || !propertyId || !action) return badRequest('Missing mortgage fields')
+    const token = readPlayerToken(req)
 
     await mutateGameStorage(roomId, (storage) => {
-      const player = storage.players.find((candidate) => candidate.id === playerId)
+      const player = authenticatePlayer(storage, roomId, playerId, token)
+      assertGamePhase(storage, ['playing', 'landed', 'buy_decision'])
+      assertIsActivePlayer(storage, player.id)
       const tile = getTile(propertyId)
       const properties = propertyMap(storage.properties)
       const property = properties.get(propertyId)
-      if (!player || !tile || !property) throw new Error('Invalid player or property')
-      if (property.ownerId !== playerId) throw new Error('Player does not own property')
+      if (!tile || !property) throw new Error('Invalid player or property')
+      if (property.ownerId !== player.id) throw new Error('Player does not own property')
       if (property.houses > 0 || property.hotels > 0) throw new Error('Cannot mortgage or sell property with buildings')
 
       const mortgageValue = tile.mortgage ?? 0

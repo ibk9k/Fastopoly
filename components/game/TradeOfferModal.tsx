@@ -63,7 +63,7 @@ export default function TradeOfferModal({ roomId }: TradeOfferModalProps) {
     setSubmitting(accept ? 'accept' : 'reject')
     setError('')
     try {
-      await postJson<TradeResponse>('/api/game/trade', { roomId, offer, action: 'respond', accept })
+      await postJson<TradeResponse>('/api/game/trade', { roomId, playerId: selfPlayer?.id, offer, action: 'respond', accept })
     } catch (responseError) {
       setError(responseError instanceof Error ? responseError.message : 'Trade response failed')
     } finally {

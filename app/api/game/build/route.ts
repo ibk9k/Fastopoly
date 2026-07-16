@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { COLOR_GROUPS, getTile } from '@/lib/game-engine/board'
 import { hasFullColorGroup } from '@/lib/game-engine/actions'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
+import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
 
@@ -13,15 +15,18 @@ export async function POST(req: NextRequest) {
       action?: 'build' | 'demolish'
     }
     if (!roomId || !playerId || !propertyId || !action) return badRequest('Missing build fields')
+    const token = readPlayerToken(req)
 
     await mutateGameStorage(roomId, (storage) => {
-      const player = storage.players.find((candidate) => candidate.id === playerId)
+      const player = authenticatePlayer(storage, roomId, playerId, token)
+      assertGamePhase(storage, ['playing', 'landed', 'buy_decision'])
+      assertIsActivePlayer(storage, player.id)
       const tile = getTile(propertyId)
       const properties = propertyMap(storage.properties)
       const property = properties.get(propertyId)
-      if (!player || !tile || !property) throw new Error('Invalid player or property')
-      if (property.ownerId !== playerId) throw new Error('Player does not own property')
-      if (!hasFullColorGroup(playerId, propertyId, properties)) throw new Error('Full color group required')
+      if (!tile || !property) throw new Error('Invalid player or property')
+      if (property.ownerId !== player.id) throw new Error('Player does not own property')
+      if (!hasFullColorGroup(player.id, propertyId, properties)) throw new Error('Full color group required')
 
       const groupIds = COLOR_GROUPS[tile.colorGroup ?? ''] ?? []
       const group = groupIds.map((id) => properties.get(id)).filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
@@ -33,7 +38,9 @@ export async function POST(req: NextRequest) {
         if (currentBuildings > minBuildings) throw new Error('Even building rule violation')
         if (property.houses === 4) {
           if ((storage.hotelSupply ?? 12) <= 0) throw new Error('No hotels available')
-          player.cash -= tile.hotelCost ?? 0
+          const hotelCost = tile.hotelCost ?? 0
+          if (player.cash < hotelCost) throw new Error('Insufficient cash to build')
+          player.cash -= hotelCost
           property.houses = 0
           property.hotels = 1
           storage.houseSupply = (storage.houseSupply ?? 32) + 4
@@ -41,7 +48,9 @@ export async function POST(req: NextRequest) {
           player.hasBuiltHotel = true
         } else {
           if ((storage.houseSupply ?? 32) <= 0) throw new Error('No houses available')
-          player.cash -= tile.houseCost ?? 0
+          const houseCost = tile.houseCost ?? 0
+          if (player.cash < houseCost) throw new Error('Insufficient cash to build')
+          player.cash -= houseCost
           property.houses += 1
           storage.houseSupply = (storage.houseSupply ?? 32) - 1
         }

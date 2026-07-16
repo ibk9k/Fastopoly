@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, rollDice, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, endTurn, mutateGameStorage } from '@/lib/game-engine/server-state'
@@ -11,10 +12,12 @@ export async function POST(req: NextRequest) {
       action?: 'pay' | 'use_card' | 'roll'
     }
     if (!roomId || !playerId || !action) return badRequest('Missing jail fields')
+    const token = readPlayerToken(req)
 
     const result = await mutateGameStorage(roomId, (storage) => {
+      const caller = authenticatePlayer(storage, roomId, playerId, token)
       assertGamePhase(storage, 'playing')
-      assertIsActivePlayer(storage, playerId)
+      assertIsActivePlayer(storage, caller.id)
       const player = storage.players[storage.currentPlayerIndex]
       if (!player.inJail) throw new Error('Player is not in jail')
 

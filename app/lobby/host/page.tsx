@@ -4,6 +4,7 @@ import { customAlphabet } from 'nanoid'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { GameRules } from '@/lib/liveblocks.config'
+import { setStoredHostToken } from '@/lib/game-client/tokens'
 
 const createCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 5)
 
@@ -48,12 +49,16 @@ export default function HostLobbyPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roomCode, username, mapType, rules, isPublic: true }),
     })
-    const result = (await response.json()) as { roomCode?: string; error?: string }
+    const result = (await response.json()) as { roomCode?: string; hostToken?: string; error?: string }
     setCreating(false)
 
     if (!response.ok || !result.roomCode) {
       setError(result.error ?? 'Could not create room')
       return
+    }
+
+    if (result.hostToken) {
+      setStoredHostToken(result.roomCode, result.hostToken)
     }
 
     sessionStorage.setItem('fastopoly_rules', JSON.stringify(rules))

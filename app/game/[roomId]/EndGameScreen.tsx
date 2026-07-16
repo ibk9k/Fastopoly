@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { calculatePlayerNetWorth, formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
+import { getStoredHostToken } from '@/lib/game-client/tokens'
 import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import type { PlayerResult } from '@/lib/game-engine/scoring'
 
@@ -24,7 +25,8 @@ export default function EndGameScreen() {
   const calledRef = useRef(false)
 
   const selfPlayer = resolveLocalPlayer(players, self)
-  const shouldPersistResults = players[0]?.id === selfPlayer?.id
+  // /api/game/end is host-only; only the client holding the host token persists final scores.
+  const shouldPersistResults = players[0]?.id === selfPlayer?.id && Boolean(roomId && getStoredHostToken(roomId))
 
   useEffect(() => {
     if (!roomId || calledRef.current || !shouldPersistResults) return

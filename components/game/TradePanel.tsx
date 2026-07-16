@@ -115,7 +115,7 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
     }
 
     try {
-      await postJson<TradeResponse>('/api/game/trade', { roomId, offer, action: 'propose' })
+      await postJson<TradeResponse>('/api/game/trade', { roomId, playerId: selfPlayer.id, offer, action: 'propose' })
       onClose()
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Trade offer failed')

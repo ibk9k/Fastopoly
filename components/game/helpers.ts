@@ -1,5 +1,6 @@
 import type { Player, Property } from '@/lib/liveblocks.config'
 import { COLOR_GROUPS, getTile } from '@/lib/game-engine/board'
+import { ensurePlayerToken, getStoredHostToken, getStoredPlayerToken, getStoredUsername } from '@/lib/game-client/tokens'
 
 export type PlayerView = Readonly<Player>
 export type PropertyView = Readonly<Property>
@@ -85,10 +86,32 @@ export function calculatePlayerNetWorth(player: PlayerView, properties: Property
   }, 0)
 }
 
+/**
+ * Resolves the auth token for a game action from its body:
+ * - `{ roomId, playerId }` → the player's token (lazy-claimed if not yet cached).
+ * - `{ roomId }` with no playerId → the host token (init/end).
+ */
+async function resolveActionToken(body: unknown): Promise<string | null> {
+  if (!body || typeof body !== 'object') return null
+  const { roomId, playerId } = body as { roomId?: unknown; playerId?: unknown }
+  if (typeof roomId !== 'string') return null
+  if (typeof playerId === 'string' && playerId.length > 0) {
+    const cached = getStoredPlayerToken(roomId, playerId)
+    if (cached) return cached
+    const username = getStoredUsername()
+    return username ? ensurePlayerToken(roomId, playerId, username) : null
+  }
+  return getStoredHostToken(roomId)
+}
+
 export async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = await resolveActionToken(body)
+  if (token) headers['x-player-token'] = token
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   })
 

@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTile } from '@/lib/game-engine/board'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
-import { addLog, endTurn, handlePostLanding, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
+import { addLog, handlePostLanding, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
 
 export async function POST(req: NextRequest) {
   try {
-    const { roomId } = (await req.json()) as { roomId?: string }
+    const { roomId, playerId } = (await req.json()) as { roomId?: string; playerId?: string }
     if (!roomId) return badRequest('Missing roomId')
+    const token = readPlayerToken(req)
 
     const result = await mutateGameStorage(roomId, (storage) => {
+      // Any seated player may trigger resolution (the timer is still enforced below).
+      authenticatePlayer(storage, roomId, playerId, token)
       if (storage.gamePhase !== 'auction') {
         return {
           success: true,

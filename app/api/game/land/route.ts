@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { CHANCE_CARDS, COMMUNITY_CHEST_CARDS } from '@/lib/game-engine/cards'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, broadcastRoomEvent, endTurn, handlePostLanding, mutateGameStorage } from '@/lib/game-engine/server-state'
@@ -28,14 +29,19 @@ function queueBankruptcyEvents(storage: JsonStorage, alreadyBankruptIds: Set<str
 
 export async function POST(req: NextRequest) {
   try {
-    const { roomId, playerId, diceTotal } = (await req.json()) as { roomId?: string; playerId?: string; diceTotal?: number }
+    const { roomId, playerId } = (await req.json()) as { roomId?: string; playerId?: string }
     if (!roomId || !playerId) return badRequest('Missing roomId or playerId')
+    const token = readPlayerToken(req)
 
     const events: RoomEvent[] = []
     const result = await mutateGameStorage(roomId, (storage) => {
-      assertGamePhase(storage, ['landed', 'playing'])
-      assertIsActivePlayer(storage, playerId)
+      const caller = authenticatePlayer(storage, roomId, playerId, token)
+      // 'landed' only (not 'playing') closes the land-replay money-printing exploit.
+      assertGamePhase(storage, 'landed')
+      assertIsActivePlayer(storage, caller.id)
       const player = activePlayer(storage)
+      // Utility rent must use the server's recorded roll, never a client-supplied diceTotal.
+      const diceTotal = (storage.lastDiceRoll?.d1 ?? 0) + (storage.lastDiceRoll?.d2 ?? 0)
       const tile = BOARD[player.position]
       const alreadyBankruptIds = new Set(storage.players.filter((candidate) => candidate.isBankrupt).map((candidate) => candidate.id))
       let result: LandResult

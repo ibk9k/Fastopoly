@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { HOST_SUBJECT, signGameToken } from '@/lib/game-engine/auth'
+import { seedLobbyStorage } from '@/lib/game-engine/server-state'
+import type { GameRules } from '@/lib/liveblocks.config'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
 type CreateLobbyBody = {
   roomCode?: string
   username?: string
   mapType?: string
-  rules?: { maxPlayers?: number }
+  rules?: Partial<GameRules>
   isPublic?: boolean
 }
 
@@ -30,7 +33,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ roomCode: body.roomCode })
+    // Seed the Liveblocks storage server-side so clients don't need write access to bootstrap it.
+    const rules: GameRules = {
+      startingCash: body.rules?.startingCash ?? 1500,
+      freeParkingJackpot: body.rules?.freeParkingJackpot ?? false,
+      auctionOnPass: body.rules?.auctionOnPass ?? true,
+      speedDie: body.rules?.speedDie ?? false,
+      maxPlayers: body.rules?.maxPlayers ?? 4,
+    }
+    await seedLobbyStorage(body.roomCode, rules, body.mapType)
+
+    // Issue the host token to the creator only. It gates host-only routes (init, end).
+    const hostToken = signGameToken(body.roomCode, HOST_SUBJECT)
+    return NextResponse.json({ roomCode: body.roomCode, hostToken })
   } catch (error) {
     console.error('Create lobby failed', error)
     return NextResponse.json({ error: 'Unable to create room' }, { status: 500 })

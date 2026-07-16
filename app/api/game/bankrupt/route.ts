@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
+import { assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, broadcastRoomEvent, endTurn, mutateGameStorage } from '@/lib/game-engine/server-state'
 
@@ -7,10 +9,12 @@ export async function POST(req: NextRequest) {
     const { roomId, playerId } = (await req.json()) as { roomId?: string; playerId?: string }
     if (!roomId) return badRequest('Missing roomId')
     if (!playerId) return badRequest('Missing playerId')
+    const token = readPlayerToken(req)
 
     await mutateGameStorage(roomId, (storage) => {
-      const player = storage.players.find((p) => p.id === playerId)
-      if (!player) throw new Error('Player not found')
+      // Auth makes this self-only; requiring the active turn keeps the endTurn() below correct.
+      const player = authenticatePlayer(storage, roomId, playerId, token)
+      assertIsActivePlayer(storage, player.id)
       if (player.isBankrupt) throw new Error('Player is already bankrupt')
 
       // Return all properties to the bank

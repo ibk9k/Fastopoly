@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTile } from '@/lib/game-engine/board'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, mutateGameStorage } from '@/lib/game-engine/server-state'
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest) {
     if (![2, 10, 50].includes(increment)) {
       return badRequest('Invalid bid increment. Must be 2, 10, or 50')
     }
+    const token = readPlayerToken(req)
 
     const result = await mutateGameStorage(roomId, (storage) => {
       assertGamePhase(storage, 'auction')
@@ -29,8 +31,7 @@ export async function POST(req: NextRequest) {
       if (!tile) throw new Error('Invalid property')
 
       // Validate the bidder
-      const bidder = storage.players.find((p) => p.id === playerId)
-      if (!bidder) throw new Error('Invalid player')
+      const bidder = authenticatePlayer(storage, roomId, playerId, token)
       if (bidder.isBankrupt) throw new Error('Bankrupt players cannot bid')
 
       // Check if the timer has already expired

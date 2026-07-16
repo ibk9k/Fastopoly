@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateScores } from '@/lib/game-engine/scoring'
 import type { Player, Property } from '@/lib/liveblocks.config'
+import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
+import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { endTurn, mutateGameStorage, propertyMap } from '@/lib/game-engine/server-state'
 import { supabaseAdmin } from '@/lib/supabase/server'
@@ -38,13 +40,19 @@ async function persistEndedGame(roomId: string, storagePlayers: Parameters<typeo
 
 export async function POST(req: NextRequest) {
   try {
-    const { roomId } = (await req.json()) as { roomId?: string }
+    const { roomId, playerId } = (await req.json()) as { roomId?: string; playerId?: string }
     if (!roomId) return badRequest('Missing roomId')
+    const token = readPlayerToken(req)
 
     let shouldPersist = false
     let players: Player[] = []
     let properties: Map<string, Property> = new Map()
     await mutateGameStorage(roomId, (storage) => {
+      const caller = authenticatePlayer(storage, roomId, playerId, token)
+      // 'playing' only: after rolling the phase is 'landed', so the landing must be
+      // resolved (rent/card/tax) before the turn can end — this closes the skip-rent exploit.
+      assertGamePhase(storage, 'playing')
+      assertIsActivePlayer(storage, caller.id)
       const activePlayer = storage.players[storage.currentPlayerIndex]
       if (activePlayer && activePlayer.cash < 0 && !activePlayer.isBankrupt) {
         throw new Error('Cannot end turn while in debt. Mortgage properties or declare bankruptcy.')

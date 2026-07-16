@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { GameRules, Player } from '@/lib/liveblocks.config'
-import { addLog, emptyStorage, initialProperties, initializeGameStorage, writeGameStorage } from '@/lib/game-engine/server-state'
+import { authenticateHost, readPlayerToken } from '@/lib/game-engine/auth'
+import { addLog, emptyStorage, initialProperties, initializeGameStorage, readGameStorage, writeGameStorage } from '@/lib/game-engine/server-state'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
@@ -15,6 +16,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as InitBody
     if (!body.roomId || !body.players || !body.rules) return badRequest('Missing game init fields')
+    authenticateHost(body.roomId, readPlayerToken(req))
+
+    // Refuse to clobber a game that has already left the lobby (reset/force-restart exploit).
+    const existing = await readGameStorage(body.roomId).catch(() => null)
+    if (existing && existing.gamePhase !== 'lobby') {
+      throw new Error('Game has already started')
+    }
 
     const storage = emptyStorage(body.rules, body.mapType ?? 'classic')
     storage.gamePhase = 'playing'
