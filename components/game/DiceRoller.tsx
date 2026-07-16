@@ -67,20 +67,20 @@ export default function DiceRoller({
         isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
       }`}
     >
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes dice-glow-pulse {
-          from { filter: drop-shadow(0 0 8px rgba(255, 235, 120, 0.75)) drop-shadow(0 0 3px rgba(255, 235, 120, 0.5)); }
-          to { filter: drop-shadow(0 0 20px rgba(255, 235, 120, 0.98)) drop-shadow(0 0 8px rgba(255, 235, 120, 0.8)); }
-        }
-        .dice-glow {
-          animation: dice-glow-pulse 1.2s infinite alternate;
-        }
-      `}} />
-
       <div
-        className={`flex items-center justify-center ${glow ? 'dice-glow' : ''}`}
+        className="relative flex items-center justify-center"
         style={{ width: `calc(${sizeValue} * 3.2)`, height: canvasHeight }}
       >
+        {glow && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 animate-pulse rounded-full"
+            style={{
+              background:
+                'radial-gradient(circle, rgba(255,235,120,0.55) 0%, rgba(255,235,120,0) 70%)',
+            }}
+          />
+        )}
         <DiceCanvas {...sceneProps} />
       </div>
     </div>

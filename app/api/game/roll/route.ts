@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, rollDice, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, broadcastRoomEvent, mutateGameStorage } from '@/lib/game-engine/server-state'
-import { sendToJail } from '@/lib/game-engine/actions'
 
 export async function POST(req: NextRequest) {
   try {

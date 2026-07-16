@@ -175,7 +175,7 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <div className="rounded-md border border-[#e58a74]/30 bg-white/50 p-4">
               <h3 className="font-bold text-zinc-900">You give</h3>
-              <label className="mt-3 block text-sm text-zinc-755 font-semibold text-zinc-700">
+              <label className="mt-3 block text-sm font-semibold text-zinc-700">
                 Cash
                 <input
                   type="number"
@@ -198,7 +198,7 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
 
             <div className="rounded-md border border-[#e58a74]/30 bg-white/50 p-4">
               <h3 className="font-bold text-zinc-900">You get</h3>
-              <label className="mt-3 block text-sm text-zinc-755 font-semibold text-zinc-700">
+              <label className="mt-3 block text-sm font-semibold text-zinc-700">
                 Cash from {targetPlayer.username}
                 <input
                   type="number"

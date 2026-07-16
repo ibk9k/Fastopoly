@@ -72,7 +72,7 @@ export default function EndGameScreen() {
             </Link>
           </div>
 
-          {error ? <p className="mt-5 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</p> : null}
+          {error ? <p className="mt-5 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">{error}</p> : null}
 
           <div className="mt-8 grid gap-3">
             {standings.map((result) => {

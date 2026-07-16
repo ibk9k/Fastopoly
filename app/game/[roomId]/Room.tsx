@@ -82,7 +82,16 @@ export default function Room({ roomId, children }: { roomId: string; children: R
   }
 
   if (!username) {
-    return <div className="min-h-screen bg-[#F7F0E4] p-8 text-zinc-900 flex items-center justify-center font-bold">Loading room...</div>
+    return (
+      <div className="min-h-screen bg-[#F7F0E4] p-8 text-[#2f4d20] flex flex-col items-center justify-center gap-4 font-sans">
+        <div
+          className="h-10 w-10 animate-spin rounded-full border-4 border-[#2f4d20]/25 border-t-[#2f4d20]"
+          role="status"
+          aria-label="Loading room"
+        />
+        <p className="text-sm font-bold uppercase tracking-wider">Loading room…</p>
+      </div>
+    )
   }
 
   return (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Die from './Die'
 import { getQuaternionForFace } from './dice-orientations'
@@ -58,6 +58,7 @@ export default function DiceScene({
   onRollComplete,
   startRollSignal = 0,
 }: DiceSceneProps) {
+  const invalidate = useThree((state) => state.invalidate)
   const die1GroupRef = useRef<THREE.Group>(null)
   const die2GroupRef = useRef<THREE.Group>(null)
   const die1Ref = useRef(createDieState(rollTrigger?.d1 ?? 3))
@@ -95,8 +96,10 @@ export default function DiceScene({
       die2Ref.current.spinVelocity = createSpinVelocity()
 
       notifyRolling(true)
+      // Kick the render loop: in frameloop="demand" the canvas is otherwise idle.
+      invalidate()
     },
-    [notifyRolling],
+    [notifyRolling, invalidate],
   )
 
   useEffect(() => {
@@ -108,6 +111,7 @@ export default function DiceScene({
       die1Ref.current = createDieState(rollTrigger.d1)
       die2Ref.current = createDieState(rollTrigger.d2)
       applyGroupTransforms()
+      invalidate()
       return
     }
 
@@ -118,7 +122,7 @@ export default function DiceScene({
         beginRoll(targetRef.current)
       }
     }
-  }, [rollTrigger, beginRoll])
+  }, [rollTrigger, beginRoll, invalidate])
 
   useEffect(() => {
     if (startRollSignal === 0) return
@@ -196,6 +200,9 @@ export default function DiceScene({
     }
 
     applyGroupTransforms()
+
+    // Keep the demand-driven loop alive only while an animation is in progress.
+    if (phaseRef.current !== 'idle') invalidate()
   })
 
   const identityQuat = new THREE.Quaternion()

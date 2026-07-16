@@ -1,5 +1,5 @@
 import type { Player, Property } from '@/lib/liveblocks.config'
-import { BOARD, COLOR_GROUPS, getTile } from '@/lib/game-engine/board'
+import { COLOR_GROUPS, getTile } from '@/lib/game-engine/board'
 
 export type PlayerView = Readonly<Player>
 export type PropertyView = Readonly<Property>
@@ -83,12 +83,6 @@ export function calculatePlayerNetWorth(player: PlayerView, properties: Property
       property.houses * (tile.houseCost ?? 0) + property.hotels * ((tile.houseCost ?? 0) * 4 + (tile.hotelCost ?? 0))
     return total + baseValue + buildingValue
   }, 0)
-}
-
-export function ownedPropertyTiles(player: PlayerView): typeof BOARD {
-  return player.properties
-    .map((propertyId) => getTile(propertyId))
-    .filter((tile): tile is (typeof BOARD)[number] => Boolean(tile))
 }
 
 export async function postJson<T>(url: string, body: unknown): Promise<T> {

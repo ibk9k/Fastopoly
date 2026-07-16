@@ -203,7 +203,7 @@ export default function GameBoard() {
                       type="checkbox"
                       checked={isPublic}
                       onChange={(e) => void togglePublic(e.target.checked)}
-                      className="h-4.5 w-4.5 rounded accent-[#2f4d20] cursor-pointer"
+                      className="h-[18px] w-[18px] rounded accent-[#2f4d20] cursor-pointer"
                     />
                   </label>
                 ) : (
@@ -273,7 +273,7 @@ export default function GameBoard() {
                       disabled={!isHost}
                       checked={rules.freeParkingJackpot}
                       onChange={(e) => updateRule('freeParkingJackpot', e.target.checked)}
-                      className="h-4.5 w-4.5 rounded border-[#e58a74]/30 accent-[#2f4d20] disabled:opacity-80"
+                      className="h-[18px] w-[18px] rounded border-[#e58a74]/30 accent-[#2f4d20] disabled:opacity-80"
                     />
                   </label>
 
@@ -284,7 +284,7 @@ export default function GameBoard() {
                       disabled={!isHost}
                       checked={rules.auctionOnPass}
                       onChange={(e) => updateRule('auctionOnPass', e.target.checked)}
-                      className="h-4.5 w-4.5 rounded border-[#e58a74]/30 accent-[#2f4d20] disabled:opacity-80"
+                      className="h-[18px] w-[18px] rounded border-[#e58a74]/30 accent-[#2f4d20] disabled:opacity-80"
                     />
                   </label>
 
@@ -295,7 +295,7 @@ export default function GameBoard() {
                       disabled={!isHost}
                       checked={rules.speedDie}
                       onChange={(e) => updateRule('speedDie', e.target.checked)}
-                      className="h-4.5 w-4.5 rounded border-[#e58a74]/30 accent-[#2f4d20] disabled:opacity-80"
+                      className="h-[18px] w-[18px] rounded border-[#e58a74]/30 accent-[#2f4d20] disabled:opacity-80"
                     />
                   </label>
                 </div>

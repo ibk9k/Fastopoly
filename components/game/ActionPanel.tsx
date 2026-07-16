@@ -13,22 +13,6 @@ type ActionPanelProps = {
   placement?: 'sidebar' | 'mobile'
 }
 
-type RollResponse = {
-  dice: [number, number]
-  newPosition: number
-  passedGo: boolean
-}
-
-type LandResponse = {
-  action: string
-  amount?: number
-  property?: {
-    id: string
-    name: string
-    price?: number
-  }
-}
-
 type JailResponse = {
   success: boolean
   dice?: [number, number]
@@ -39,23 +23,7 @@ type BasicResponse = {
   success: boolean
 }
 
-type PendingBuy = {
-  propertyId: string
-  name: string
-  price: number
-}
-
 type BusyAction = 'roll' | 'buy' | 'pass' | 'jail-pay' | 'jail-card' | 'jail-roll' | 'end-turn' | 'bankrupt'
-
-function actionMessage(response: LandResponse): string {
-  if (response.action === 'paid_rent') return `Paid ${formatMoney(response.amount ?? 0)} rent.`
-  if (response.action === 'tax') return `Paid ${formatMoney(response.amount ?? 0)} tax.`
-  if (response.action === 'jail') return 'Moved to jail.'
-  if (response.action === 'free_parking') return 'Landed on Free Parking.'
-  if (response.action === 'card') return 'Card resolved.'
-  if (response.action === 'nothing') return 'No action required.'
-  return response.action.replaceAll('_', ' ')
-}
 
 export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, placement = 'mobile' }: ActionPanelProps) {
   const self = useSelf()

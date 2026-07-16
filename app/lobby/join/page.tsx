@@ -17,6 +17,7 @@ export default function JoinLobbyPage() {
   const [roomCode, setRoomCode] = useState('')
   const [rooms, setRooms] = useState<PublicRoom[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [loadingRooms, setLoadingRooms] = useState(true)
 
   const fetchRooms = useCallback(async () => {
     const { data } = await supabase
@@ -25,6 +26,7 @@ export default function JoinLobbyPage() {
       .eq('status', 'waiting')
       .order('created_at', { ascending: false })
     setRooms(data ?? [])
+    setLoadingRooms(false)
   }, [])
 
   useEffect(() => {
@@ -90,7 +92,16 @@ export default function JoinLobbyPage() {
             <p className="mt-1 text-xs font-bold text-zinc-700">Browse and join active lobbies.</p>
             
             <div className="mt-5 grid gap-3">
-              {rooms.map((room) => (
+              {loadingRooms
+                ? [0, 1, 2].map((i) => (
+                    <div
+                      key={`skeleton-${i}`}
+                      className="h-[58px] animate-pulse rounded-lg border border-[#e58a74]/30 bg-white/20"
+                    />
+                  ))
+                : null}
+              {!loadingRooms &&
+                rooms.map((room) => (
                 <div key={room.id} className="flex items-center justify-between gap-4 rounded-lg border border-[#e58a74]/30 bg-white/20 px-4 py-3 shadow-sm">
                   <div>
                     <p className="font-black text-zinc-900 text-sm capitalize">{room.host_username}</p>
@@ -106,7 +117,7 @@ export default function JoinLobbyPage() {
                   </button>
                 </div>
               ))}
-              {rooms.length === 0 ? (
+              {!loadingRooms && rooms.length === 0 ? (
                 <p className="rounded-lg border border-[#e58a74]/30 bg-white/10 px-4 py-6 text-center text-xs font-bold text-zinc-700">
                   No public games waiting.
                 </p>
