@@ -11,7 +11,9 @@ export default function DiceCanvas(props: DiceCanvasProps) {
     <Canvas
       frameloop="demand"
       dpr={[1, 2]}
-      gl={{ alpha: true, antialias: true }}
+      // premultipliedAlpha: false avoids the dark halo/ring WebGL otherwise blends around
+      // antialiased edges when compositing a transparent canvas over the page.
+      gl={{ alpha: true, antialias: true, premultipliedAlpha: false }}
       camera={{ position: [0, 3.8, 2.6], fov: 30, near: 0.1, far: 50 }}
       style={{ background: 'transparent', width: '100%', height: '100%' }}
       onCreated={({ gl, camera }) => {

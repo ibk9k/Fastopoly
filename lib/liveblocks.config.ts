@@ -95,6 +95,11 @@ export type DiceRollState = {
   d1: number
   d2: number
   timestamp: number
+  /** Who rolled, and the tile the dice actually hit BEFORE any card/jail relocation.
+   * Carried in the same storage write as the final position so clients can stage the
+   * token on the landing tile first — an out-of-band event would race the delta. */
+  playerId?: string
+  landedOn?: number
 }
 
 type Presence = {

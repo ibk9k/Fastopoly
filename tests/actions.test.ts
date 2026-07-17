@@ -47,6 +47,15 @@ describe('moveBy', () => {
     expect(p.position).toBe(39)
     expect(p.cash).toBe(0)
   })
+
+  it('applyCard go_back moves the player back three tiles from a Chance space', () => {
+    const storage = makeStorage()
+    const p = makePlayer({ position: 22 }) // Chance
+    const card = { id: 'chance-go-back-three', text: 'Go back three spaces.', action: { type: 'go_back', steps: 3 } } as const
+    const result = applyCard(storage, p, card)
+    expect(p.position).toBe(19) // New York Avenue
+    expect(result.followUpTile).toBe(true)
+  })
 })
 
 describe('nearestTileIndex', () => {

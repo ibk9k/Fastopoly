@@ -8,6 +8,8 @@ import { addLog, endTurn, handlePostLanding, propertyMap, toPropertyRecord } fro
 export type RollOutcome = {
   dice: [number, number]
   newPosition: number
+  /** The tile the dice landed on BEFORE any card/jail relocation (for staged token animation). */
+  landedOn: number
   passedGo: boolean
   action: string
   amount?: number
@@ -94,29 +96,33 @@ export function applyRoll(storage: JsonStorage, d1: number, d2: number, events: 
   const player = activePlayer(storage)
   const isDoubles = d1 === d2
 
-  storage.lastDiceRoll = { d1, d2, timestamp: Date.now() }
+  storage.lastDiceRoll = { d1, d2, timestamp: Date.now(), playerId: player.id }
   storage.hasRolled = true
   storage.lastRollWasDoubles = isDoubles
   storage.consecutiveDoubles = isDoubles ? (storage.consecutiveDoubles ?? 0) + 1 : 0
 
   if (isDoubles && (storage.consecutiveDoubles ?? 0) >= 3) {
+    // No movement on the third doubles — stage on the tile they were standing on.
+    const startPosition = player.position
+    storage.lastDiceRoll.landedOn = startPosition
     storage.lastRollWasDoubles = false
     storage.consecutiveDoubles = 0
     sendToJail(player)
     addLog(storage, `${player.username} rolled three consecutive doubles and was sent to jail!`)
     endTurn(storage)
-    return { dice: [d1, d2], newPosition: player.position, passedGo: false, action: 'jail' }
+    return { dice: [d1, d2], newPosition: player.position, landedOn: startPosition, passedGo: false, action: 'jail' }
   }
 
   const total = d1 + d2
   const nextPosition = (player.position + total) % BOARD.length
   const passedGo = nextPosition < player.position
   player.position = nextPosition
+  storage.lastDiceRoll.landedOn = nextPosition
   if (passedGo) player.cash += 200
   addLog(storage, `${player.username} rolled ${d1} and ${d2}.`)
 
   const result = resolveCurrentTile(storage, player, total, events)
-  return { dice: [d1, d2], newPosition: player.position, passedGo, ...result }
+  return { dice: [d1, d2], newPosition: player.position, landedOn: nextPosition, passedGo, ...result }
 }
 
 /**

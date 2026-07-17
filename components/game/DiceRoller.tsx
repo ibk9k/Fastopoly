@@ -95,8 +95,11 @@ export default function DiceRoller({
       onClick={handleLocalClick}
       disabled={!isClickable}
       aria-label={isRolling ? 'Rolling the dice' : isClickable ? 'Roll the dice' : 'Dice (waiting for your turn)'}
-      className={`flex select-none flex-col items-center justify-center appearance-none border-0 bg-transparent p-0 rounded-2xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-pine focus-visible:ring-offset-2 ${
-        isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
+      // No focus ring here: Modal restores focus programmatically, which browsers treat
+      // as :focus-visible — that painted a dark pine ring around the dice on the felt.
+      // The golden glow + hover scale carry the affordance instead.
+      className={`flex select-none flex-col items-center justify-center appearance-none border-0 bg-transparent p-0 outline-none focus:outline-none ${
+        isClickable ? 'cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
       }`}
     >
       {inner}

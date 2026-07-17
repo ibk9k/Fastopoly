@@ -100,6 +100,24 @@ describe('applyRoll — doubles', () => {
   })
 })
 
+describe('applyRoll — staged landing info for token animation', () => {
+  it('records the Go To Jail tile as landedOn while the final position is jail', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 22 })
+    const storage = makeStorage({ players: [p0, makePlayer({ id: 'player-1' })] })
+    applyRoll(storage, 4, 4, events()) // 22 + 8 = 30 (Go To Jail)
+    expect(storage.lastDiceRoll.landedOn).toBe(30) // dice landing tile
+    expect(storage.lastDiceRoll.playerId).toBe('player-0')
+    expect(p0.position).toBe(10) // final position after relocation
+  })
+
+  it('records the Chance tile as landedOn even when the card relocates the player', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 5, cash: 1000 })
+    const storage = makeStorage({ players: [p0, makePlayer({ id: 'player-1' })], chanceIndex: 0 })
+    applyRoll(storage, 1, 1, events()) // 5 + 2 = 7 (Chance)
+    expect(storage.lastDiceRoll.landedOn).toBe(7) // always the tile the dice hit
+  })
+})
+
 describe('applyRoll — utility rent uses the server dice', () => {
   it('charges dice x4 from the actual roll, not a client-supplied total', () => {
     const props = makePropertyMap()

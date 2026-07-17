@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
       const dice = rollDice()
       const total = dice[0] + dice[1]
-      storage.lastDiceRoll = { d1: dice[0], d2: dice[1], timestamp: Date.now() }
+      storage.lastDiceRoll = { d1: dice[0], d2: dice[1], timestamp: Date.now(), playerId: player.id }
       storage.hasRolled = true
       // A jail-escape roll never grants a doubles re-roll.
       storage.lastRollWasDoubles = false
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
         player.inJail = false
         player.jailTurns = 0
         player.position = (player.position + total) % BOARD.length
+        storage.lastDiceRoll.landedOn = player.position
         addLog(storage, `${player.username} rolled doubles (${dice[0]}s) and left jail.`)
         const landing = resolveCurrentTile(storage, player, total, events)
         return { success: true, dice, canRoll: false, action: landing.action }
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
         player.inJail = false
         player.jailTurns = 0
         player.position = (player.position + total) % BOARD.length
+        storage.lastDiceRoll.landedOn = player.position
         addLog(storage, `${player.username} paid $50 after three failed jail rolls and moved on.`)
         const landing = resolveCurrentTile(storage, player, total, events)
         return { success: true, dice, canRoll: false, action: landing.action }
