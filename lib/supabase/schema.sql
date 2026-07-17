@@ -25,5 +25,10 @@ create table public_rooms (
   max_players integer default 4,
   rules jsonb not null,
   status text default 'waiting',
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  -- Bumped on room creation and game start; the join list hides rooms stale for hours.
+  last_active_at timestamptz default now()
 );
+
+-- Migration for existing databases (safe to run repeatedly):
+--   alter table public_rooms add column if not exists last_active_at timestamptz default now();

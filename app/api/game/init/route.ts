@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { GameRules, Player } from '@/lib/liveblocks.config'
 import { authenticateHost, readPlayerToken } from '@/lib/game-engine/auth'
-import { addLog, emptyStorage, initialProperties, initializeGameStorage, readGameStorage, writeGameStorage } from '@/lib/game-engine/server-state'
+import { addLog, emptyStorage, initialProperties, initializeGameStorage, readGameStorage, refreshTurnDeadline, writeGameStorage } from '@/lib/game-engine/server-state'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     }))
     storage.properties = initialProperties()
     storage.currentPlayerIndex = 0
+    refreshTurnDeadline(storage)
     addLog(storage, 'Game started!')
 
     try {
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     // Update room status in Supabase so it's not shown as waiting anymore
     await supabaseAdmin
       .from('public_rooms')
-      .update({ status: 'playing' })
+      .update({ status: 'playing', last_active_at: new Date().toISOString() })
       .eq('id', body.roomId)
 
     return NextResponse.json({ success: true })

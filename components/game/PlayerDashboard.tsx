@@ -81,9 +81,15 @@ export default function PlayerDashboard({ roomId }: PlayerDashboardProps) {
                       <div className="flex items-center gap-2">
                         <span className="h-3 w-3 rounded-full border border-black/10" style={{ backgroundColor: player.color }} />
                         <p className={`truncate font-bold text-zinc-900 ${player.isBankrupt ? 'line-through text-zinc-600' : ''}`}>{player.username}</p>
-                        {isActive ? <span className="rounded-full bg-emerald-800 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-100">Turn</span> : null}
+                        {isActive ? <span className="rounded-full bg-pine px-2 py-0.5 text-[10px] font-black uppercase text-felt">Turn</span> : null}
+                        {!isConnected && !player.isBankrupt ? (
+                          <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">Away</span>
+                        ) : null}
                       </div>
-                      <p className="mt-1 text-xs text-zinc-700">{isConnected ? 'Connected' : 'Away'}</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-700">
+                        <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-success' : 'bg-amber-500'}`} />
+                        {isConnected ? 'Connected' : 'Away'}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="font-black text-zinc-900">{formatMoney(player.cash)}</p>

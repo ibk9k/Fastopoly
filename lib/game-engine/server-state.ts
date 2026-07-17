@@ -206,6 +206,13 @@ export function propertyMap(properties: Record<string, Property>): Map<string, P
   return new Map(Object.entries(properties))
 }
 
+/** How long the current player has to act before any peer can auto-skip them. */
+export const TURN_TIMEOUT_MS = 90_000
+
+export function refreshTurnDeadline(storage: JsonStorage): void {
+  storage.turnDeadline = Date.now() + TURN_TIMEOUT_MS
+}
+
 export function endTurn(storage: JsonStorage): void {
   const activePlayers = storage.players.filter((player) => !player.isBankrupt)
   if (activePlayers.length <= 1) {
@@ -218,6 +225,7 @@ export function endTurn(storage: JsonStorage): void {
   const currentPlayer = storage.players[storage.currentPlayerIndex]
   if (currentPlayer && currentPlayer.cash < 0 && !currentPlayer.isBankrupt) {
     storage.gamePhase = 'playing'
+    refreshTurnDeadline(storage)
     addLog(storage, `${currentPlayer.username} is in debt and must raise funds or declare bankruptcy.`)
     return
   }
@@ -232,6 +240,7 @@ export function endTurn(storage: JsonStorage): void {
     }
     storage.gamePhase = 'playing'
     storage.hasRolled = false
+    refreshTurnDeadline(storage)
     return
   }
   storage.lastRollWasDoubles = false
@@ -246,6 +255,7 @@ export function endTurn(storage: JsonStorage): void {
   storage.gamePhase = 'playing'
   storage.hasRolled = false
   storage.consecutiveDoubles = 0
+  refreshTurnDeadline(storage)
 }
 
 export function handlePostLanding(storage: JsonStorage): void {

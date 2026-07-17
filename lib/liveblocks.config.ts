@@ -122,6 +122,10 @@ export type Storage = {
   lastRollWasDoubles?: boolean
   /** Consecutive doubles rolled this turn — the third sends the roller to jail. */
   consecutiveDoubles?: number
+  /** Epoch ms by which the current player must act, or their turn is auto-skipped. */
+  turnDeadline?: number
+  /** Set once final scores have been written to Supabase, so persistence is idempotent. */
+  resultsPersisted?: boolean
   auctionPropertyId?: string | null
   auctionBids?: AuctionBid[]
   auctionHighestBid?: number

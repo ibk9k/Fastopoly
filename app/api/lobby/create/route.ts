@@ -33,6 +33,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Best-effort cleanup of rooms that have sat unused in the waiting list for hours.
+    try {
+      const staleCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+      await supabaseAdmin.from('public_rooms').delete().eq('status', 'waiting').lt('last_active_at', staleCutoff)
+    } catch {
+      // Non-fatal — cleanup is opportunistic.
+    }
+
     // Seed the Liveblocks storage server-side so clients don't need write access to bootstrap it.
     const rules: GameRules = {
       startingCash: body.rules?.startingCash ?? 1500,

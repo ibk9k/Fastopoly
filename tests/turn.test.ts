@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyRoll, resolveExpiredAuction } from '@/lib/game-engine/turn'
+import { applyRoll, enforceTurnTimeout, resolveExpiredAuction } from '@/lib/game-engine/turn'
 import { CHANCE_CARDS } from '@/lib/game-engine/cards'
 import type { RoomEvent } from '@/lib/liveblocks.config'
 import { makePlayer, makeProperty, makePropertyMap, makeStorage, totalCash } from './factories'
@@ -110,6 +110,56 @@ describe('applyRoll — utility rent uses the server dice', () => {
     const result = applyRoll(storage, 2, 3, events()) // 7 + 5 = 12
     expect(result.action).toBe('paid_rent')
     expect(result.amount).toBe(20) // 5 x 4
+  })
+})
+
+describe('enforceTurnTimeout', () => {
+  it('does nothing before the deadline', () => {
+    const storage = makeStorage({
+      players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
+      turnDeadline: Date.now() + 60_000,
+    })
+    expect(enforceTurnTimeout(storage)).toBe(false)
+    expect(storage.currentPlayerIndex).toBe(0)
+  })
+
+  it('skips an idle player once the deadline passes', () => {
+    const storage = makeStorage({
+      players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+      hasRolled: false,
+    })
+    expect(enforceTurnTimeout(storage)).toBe(true)
+    expect(storage.currentPlayerIndex).toBe(1) // turn passed
+  })
+
+  it('does not grant a doubles re-roll when skipping', () => {
+    const storage = makeStorage({
+      players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+      lastRollWasDoubles: true,
+    })
+    enforceTurnTimeout(storage)
+    expect(storage.currentPlayerIndex).toBe(1)
+  })
+
+  it('auto-bankrupts a debtor who runs out of time', () => {
+    const debtor = makePlayer({ id: 'player-0', cash: -100 })
+    const storage = makeStorage({
+      players: [debtor, makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+    })
+    expect(enforceTurnTimeout(storage)).toBe(true)
+    expect(debtor.isBankrupt).toBe(true)
+  })
+
+  it('leaves an active auction alone', () => {
+    const storage = makeStorage({
+      gamePhase: 'auction',
+      players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+    })
+    expect(enforceTurnTimeout(storage)).toBe(false)
   })
 })
 

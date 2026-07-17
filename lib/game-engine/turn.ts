@@ -2,6 +2,7 @@ import type { JsonStorage, Player, RoomEvent } from '@/lib/liveblocks.config'
 import { BOARD, getTile } from './board'
 import { CHANCE_CARDS, COMMUNITY_CHEST_CARDS } from './cards'
 import { activePlayer, applyCard, resolveLanding, sendToJail } from './actions'
+import { executeBankruptcy } from './bankruptcy'
 import { addLog, endTurn, handlePostLanding, propertyMap, toPropertyRecord } from './server-state'
 
 export type RollOutcome = {
@@ -116,6 +117,39 @@ export function applyRoll(storage: JsonStorage, d1: number, d2: number, events: 
 
   const result = resolveCurrentTile(storage, player, total, events)
   return { dice: [d1, d2], newPosition: player.position, passedGo, ...result }
+}
+
+/**
+ * Auto-completes the current player's turn once their deadline passes, so an
+ * absent player can never stall the game. Any seated peer triggers this (the
+ * server clock decides), mirroring the auction-resolution pattern. Returns
+ * false when there is nothing to enforce yet.
+ */
+export function enforceTurnTimeout(storage: JsonStorage): boolean {
+  if (storage.gamePhase === 'lobby' || storage.gamePhase === 'ended' || storage.gamePhase === 'auction') {
+    return false
+  }
+  const deadline = storage.turnDeadline ?? 0
+  if (deadline === 0 || Date.now() < deadline) return false
+
+  const player = storage.players[storage.currentPlayerIndex]
+  if (!player) return false
+
+  if (player.cash < 0 && !player.isBankrupt) {
+    addLog(storage, `${player.username} ran out of time in debt and was declared bankrupt.`)
+    executeBankruptcy(storage, player, inferCreditorId(storage, player))
+    storage.lastRollWasDoubles = false
+    endTurn(storage)
+    return true
+  }
+
+  addLog(storage, `${player.username} ran out of time — their turn was skipped.`)
+  // Collapse any pending landing decision into a pass, and never grant a doubles re-roll.
+  storage.gamePhase = 'playing'
+  storage.lastRollWasDoubles = false
+  storage.consecutiveDoubles = 0
+  endTurn(storage)
+  return true
 }
 
 /**

@@ -20,11 +20,14 @@ export default function JoinLobbyPage() {
   const [loadingRooms, setLoadingRooms] = useState(true)
 
   const fetchRooms = useCallback(async () => {
+    // Hide rooms that have sat in the waiting list without activity for hours.
+    const staleCutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
     const { data } = await supabase
       .from('public_rooms')
       .select('id,host_username,map_type,player_count,max_players')
       .eq('status', 'waiting')
-      .order('created_at', { ascending: false })
+      .gte('last_active_at', staleCutoff)
+      .order('last_active_at', { ascending: false })
     setRooms(data ?? [])
     setLoadingRooms(false)
   }, [])

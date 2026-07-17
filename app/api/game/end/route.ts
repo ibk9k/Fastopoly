@@ -4,7 +4,7 @@ import type { PlayerResult } from '@/lib/game-engine/scoring'
 import { authenticateHost, readPlayerToken } from '@/lib/game-engine/auth'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { mutateGameStorage, propertyMap } from '@/lib/game-engine/server-state'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { persistGameResults } from '@/lib/game-engine/persistence'
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,41 +13,19 @@ export async function POST(req: NextRequest) {
     authenticateHost(roomId, readPlayerToken(req))
 
     let results: PlayerResult[] = []
+    let alreadyPersisted = false
     await mutateGameStorage(roomId, (storage) => {
       results = calculateScores(storage.players, propertyMap(storage.properties))
       storage.gamePhase = 'ended'
       storage.winnerIds = results.filter((result) => result.placement === 1).map((result) => result.playerId)
+      alreadyPersisted = Boolean(storage.resultsPersisted)
+      storage.resultsPersisted = true
     })
 
-    await supabaseAdmin.from('game_results').insert(
-      results.map((result) => ({
-        game_id: roomId,
-        user_id: result.playerId,
-        placement: result.placement,
-        points_earned: result.pointsEarned,
-        bonuses: result.bonuses,
-      })),
-    )
-
-    await Promise.all(
-      results.map(async (result) => {
-        const { data } = await supabaseAdmin
-          .from('users')
-          .select('total_points,games_played,wins')
-          .eq('id', result.playerId)
-          .maybeSingle()
-        await supabaseAdmin
-          .from('users')
-          .update({
-            total_points: (data?.total_points ?? 0) + result.pointsEarned,
-            games_played: (data?.games_played ?? 0) + 1,
-            wins: (data?.wins ?? 0) + (result.placement === 1 ? 1 : 0),
-          })
-          .eq('id', result.playerId)
-      }),
-    )
-
-    await supabaseAdmin.from('public_rooms').update({ status: 'finished' }).eq('id', roomId)
+    // Idempotent: only the first caller to flip resultsPersisted writes to Supabase.
+    if (!alreadyPersisted) {
+      await persistGameResults(roomId, results)
+    }
 
     return NextResponse.json({ results })
   } catch (error) {
