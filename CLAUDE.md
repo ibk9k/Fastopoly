@@ -6,7 +6,7 @@ Reference for working in this repo. Read the "Known Pitfalls" and "Trust Model" 
 
 **Fastopoly** — a real-time multiplayer Monopoly clone. Next.js 14 (App Router) + TypeScript (strict) + Tailwind, with **Liveblocks** for real-time state and **Supabase** for the room directory + leaderboard. 3D dice via react-three-fiber.
 
-An overhaul is in progress. The full roadmap lives at `C:\Users\Popo\.claude\plans\alright-i-need-you-staged-possum.md`. Direction: **security-first**, keep the **cream/green** visual identity, target **public deployment**.
+The overhaul (Phases 0–8) is complete: security-first server authority, atomic mutations + merged turn engine, a cream/green design system, decomposed game UI, correct Monopoly rules, disconnect-resilient lifecycle, and an accessibility pass. The full roadmap lives at `C:\Users\Popo\.claude\plans\alright-i-need-you-staged-possum.md`. Direction: **security-first**, keep the **cream/green** visual identity, target **public deployment**. Design-system conventions: use the `components/ui` primitives (`Button`, `Modal`, `Toast`), the semantic Tailwind tokens (`pine`/`parchment`/`salmon`/`felt`/`danger`/`success`/`seat-*`), and the z-index scale (`z-board < z-panel < z-modal < z-toast < z-critical`) — no new raw hex or ad-hoc `z-50`.
 
 ## Commands
 
