@@ -78,23 +78,23 @@ export default function DiceRoller({
     </div>
   )
 
-  // A real button when it can roll (keyboard + screen-reader operable), a plain
-  // presentational div otherwise — so the dice are never a focusable dead control.
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={handleLocalClick}
-        disabled={!isClickable}
-        aria-label={isRolling ? 'Rolling the dice' : 'Roll the dice'}
-        className={`flex select-none flex-col items-center justify-center rounded-2xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-pine focus-visible:ring-offset-2 ${
-          isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
-        }`}
-      >
-        {inner}
-      </button>
-    )
-  }
-
-  return <div className="flex select-none flex-col items-center justify-center opacity-90">{inner}</div>
+  // ALWAYS the same element type. Switching between <button> and <div> here made
+  // React remount the subtree — including the three.js <Canvas> — on every turn
+  // change and roll start, leaking a WebGL context each time (browsers then kill
+  // the oldest context → glitched dice + degrading performance). A single stable
+  // <button> keeps the canvas mounted for the whole game; `disabled` covers the
+  // non-actionable states and keeps it out of the tab order as a dead control.
+  return (
+    <button
+      type="button"
+      onClick={handleLocalClick}
+      disabled={!isClickable}
+      aria-label={isRolling ? 'Rolling the dice' : isClickable ? 'Roll the dice' : 'Dice (waiting for your turn)'}
+      className={`flex select-none flex-col items-center justify-center rounded-2xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-pine focus-visible:ring-offset-2 ${
+        isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
+      }`}
+    >
+      {inner}
+    </button>
+  )
 }
