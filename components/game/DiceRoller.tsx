@@ -66,10 +66,15 @@ export default function DiceRoller({
       style={{ width: `calc(${sizeValue} * 3.2)`, height: canvasHeight }}
     >
       {glow && (
+        // A square glow centered on the dice, sized off canvasHeight (not the wide 2:1
+        // container) — inset-0 on that non-square box clipped the circular gradient into
+        // a pill/ring at the top and bottom. This one has room to stay a full soft circle.
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 animate-pulse rounded-full"
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse"
           style={{
+            width: `calc(${canvasHeight} * 1.8)`,
+            height: `calc(${canvasHeight} * 1.8)`,
             background: 'radial-gradient(circle, rgba(255,235,120,0.55) 0%, rgba(255,235,120,0) 70%)',
           }}
         />
@@ -90,7 +95,7 @@ export default function DiceRoller({
       onClick={handleLocalClick}
       disabled={!isClickable}
       aria-label={isRolling ? 'Rolling the dice' : isClickable ? 'Roll the dice' : 'Dice (waiting for your turn)'}
-      className={`flex select-none flex-col items-center justify-center rounded-2xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-pine focus-visible:ring-offset-2 ${
+      className={`flex select-none flex-col items-center justify-center appearance-none border-0 bg-transparent p-0 rounded-2xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-pine focus-visible:ring-offset-2 ${
         isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
       }`}
     >
