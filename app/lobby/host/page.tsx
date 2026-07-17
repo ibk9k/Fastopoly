@@ -26,7 +26,6 @@ export default function HostLobbyPage() {
   const [startingCash, setStartingCash] = useState(1500)
   const [freeParkingJackpot, setFreeParkingJackpot] = useState(false)
   const [auctionOnPass, setAuctionOnPass] = useState(true)
-  const [speedDie, setSpeedDie] = useState(false)
   const [maxPlayers, setMaxPlayers] = useState(4)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -43,7 +42,7 @@ export default function HostLobbyPage() {
       startingCash,
       freeParkingJackpot,
       auctionOnPass,
-      speedDie,
+      speedDie: false,
       maxPlayers,
     }
 
@@ -125,10 +124,6 @@ export default function HostLobbyPage() {
             <label className="flex items-center justify-between gap-4 font-bold">
               <span>Auction on pass</span>
               <input type="checkbox" checked={auctionOnPass} onChange={(event) => setAuctionOnPass(event.target.checked)} className="h-5 w-5 accent-pine" />
-            </label>
-            <label className="flex items-center justify-between gap-4 font-bold">
-              <span>Speed die</span>
-              <input type="checkbox" checked={speedDie} onChange={(event) => setSpeedDie(event.target.checked)} className="h-5 w-5 accent-pine" />
             </label>
             <label className="flex items-center justify-between gap-4 font-bold">
               <span>Max players</span>

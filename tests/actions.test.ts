@@ -87,9 +87,11 @@ describe('payPlayer', () => {
     expect(storage.freeParkingPool).toBe(200)
   })
 
-  // BUG(Phase 6): payPlayer lets a player pay more than they have — cash goes negative with no
-  // liquidation/bankruptcy gate, and the receiver is still credited in full (money is invented).
-  it('CURRENTLY allows negative cash and fully credits the receiver (documented bug)', () => {
+  // Phase 6 design: the receiver is credited in full immediately (kept whole), and the payer's
+  // negative balance parks them in debt-limbo — end-turn blocks until they liquidate, and any
+  // shortfall is clawed back from the creditor at bankruptcy (see bankruptcy.test.ts), so money
+  // is conserved across the whole flow rather than at each payPlayer call.
+  it('credits the receiver in full and lets the payer go into debt', () => {
     const storage = makeStorage()
     const payer = makePlayer({ cash: 10 })
     const receiver = makePlayer({ id: 'player-1', cash: 0 })
@@ -97,8 +99,6 @@ describe('payPlayer', () => {
     expect(payer.cash).toBe(-90)
     expect(receiver.cash).toBe(100)
   })
-
-  it.todo('payPlayer should cap collectible rent at the payer’s net worth and trigger liquidation — Phase 6')
 })
 
 describe('applyCard', () => {

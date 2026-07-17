@@ -65,6 +65,9 @@ export type TradeOffer = {
   requestedProperties: string[]
   offeredCash: number
   requestedCash: number
+  /** Get Out of Jail Free cards included by each side. */
+  offeredJailCards?: number
+  requestedJailCards?: number
   status: 'pending' | 'accepted' | 'rejected'
 }
 
@@ -106,7 +109,6 @@ export type Storage = {
   currentPlayerIndex: number
   players: LiveList<Player>
   properties: Record<string, Property>
-  bank: number
   freeParkingPool: number
   chanceIndex: number
   communityChestIndex: number

@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
 
       if (action === 'build') {
         if (property.hotels > 0) throw new Error('Property already has a hotel')
+        if (group.some((member) => member.mortgaged)) {
+          throw new Error('Cannot build while any property in the color group is mortgaged')
+        }
         const minBuildings = Math.min(...group.map((item) => item.hotels > 0 ? 5 : item.houses))
         const currentBuildings = property.hotels > 0 ? 5 : property.houses
         if (currentBuildings > minBuildings) throw new Error('Even building rule violation')
@@ -60,6 +63,8 @@ export async function POST(req: NextRequest) {
         const currentBuildings = property.hotels > 0 ? 5 : property.houses
         if (currentBuildings === 0 || currentBuildings < maxBuildings) throw new Error('Even demolish rule violation')
         if (property.hotels > 0) {
+          // Demolishing a hotel puts 4 houses back on the lot — the bank must have them.
+          if ((storage.houseSupply ?? 32) < 4) throw new Error('Not enough houses in the bank to break up a hotel')
           property.hotels = 0
           property.houses = 4
           player.cash += Math.floor((tile.hotelCost ?? 0) / 2)

@@ -103,7 +103,6 @@ export default function Room({ roomId, children }: { roomId: string; children: R
         currentPlayerIndex: 0,
         players: new LiveList([]),
         properties: {},
-        bank: 20580,
         freeParkingPool: 0,
         chanceIndex: 0,
         communityChestIndex: 0,

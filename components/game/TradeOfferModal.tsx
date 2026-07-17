@@ -19,16 +19,31 @@ type TradeToast = {
   createdAt: number
 }
 
-function OfferSide({ title, propertyIds, cash }: { title: string; propertyIds: readonly string[]; cash: number }) {
+function OfferSide({
+  title,
+  propertyIds,
+  cash,
+  jailCards = 0,
+}: {
+  title: string
+  propertyIds: readonly string[]
+  cash: number
+  jailCards?: number
+}) {
   return (
     <div className="rounded-md border border-[#e58a74]/30 bg-white/50 p-4">
       <h3 className="font-bold text-zinc-900">{title}</h3>
       <div className="mt-3 grid gap-2 text-sm text-zinc-800">
         {cash > 0 ? <p className="font-semibold">{formatMoney(cash)} cash</p> : null}
+        {jailCards > 0 ? (
+          <p className="font-semibold">
+            {jailCards} Get Out of Jail card{jailCards > 1 ? 's' : ''}
+          </p>
+        ) : null}
         {propertyIds.map((propertyId) => (
           <p key={propertyId} className="font-semibold">{propertyDisplayName(propertyId)}</p>
         ))}
-        {cash === 0 && propertyIds.length === 0 ? <p className="text-zinc-600">Nothing</p> : null}
+        {cash === 0 && jailCards === 0 && propertyIds.length === 0 ? <p className="text-zinc-600">Nothing</p> : null}
       </div>
     </div>
   )
@@ -93,8 +108,18 @@ export default function TradeOfferModal({ roomId }: TradeOfferModalProps) {
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <OfferSide title={`${fromPlayer?.username ?? 'They'} gives`} propertyIds={tradeOffer.offeredProperties} cash={tradeOffer.offeredCash} />
-              <OfferSide title="You give" propertyIds={tradeOffer.requestedProperties} cash={tradeOffer.requestedCash} />
+              <OfferSide
+                title={`${fromPlayer?.username ?? 'They'} gives`}
+                propertyIds={tradeOffer.offeredProperties}
+                cash={tradeOffer.offeredCash}
+                jailCards={tradeOffer.offeredJailCards}
+              />
+              <OfferSide
+                title="You give"
+                propertyIds={tradeOffer.requestedProperties}
+                cash={tradeOffer.requestedCash}
+                jailCards={tradeOffer.requestedJailCards}
+              />
             </div>
 
             {error ? <p className="mt-4 text-sm font-bold text-red-900">{error}</p> : null}

@@ -38,6 +38,8 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
   const [requestedProperties, setRequestedProperties] = useState<string[]>([])
   const [offeredCashInput, setOfferedCashInput] = useState('0')
   const [requestedCashInput, setRequestedCashInput] = useState('0')
+  const [offeredJailCards, setOfferedJailCards] = useState(0)
+  const [requestedJailCards, setRequestedJailCards] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
 
@@ -91,12 +93,15 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
     })
     if (invalidRequested) return 'You can only request unmortgaged, building-free target properties.'
 
-    const givesNothing = offeredProperties.length === 0 && offeredCash === 0
-    const getsNothing = requestedProperties.length === 0 && requestedCash === 0
-    if (givesNothing && getsNothing) return 'Add cash or at least one property to the offer.'
+    if (offeredJailCards > selfPlayer.getOutOfJailCards) return 'You do not hold that many jail cards.'
+    if (requestedJailCards > targetPlayer.getOutOfJailCards) return `${targetPlayer.username} does not hold that many jail cards.`
+
+    const givesNothing = offeredProperties.length === 0 && offeredCash === 0 && offeredJailCards === 0
+    const getsNothing = requestedProperties.length === 0 && requestedCash === 0 && requestedJailCards === 0
+    if (givesNothing && getsNothing) return 'Add cash, a property, or a jail card to the offer.'
 
     return ''
-  }, [offeredCash, offeredProperties, properties, requestedCash, requestedProperties, selfPlayer, targetPlayer])
+  }, [offeredCash, offeredJailCards, offeredProperties, properties, requestedCash, requestedJailCards, requestedProperties, selfPlayer, targetPlayer])
 
   async function sendOffer() {
     if (!selfPlayer || !targetPlayer || validationError) return
@@ -111,6 +116,8 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
       requestedProperties,
       offeredCash,
       requestedCash,
+      offeredJailCards,
+      requestedJailCards,
       status: 'pending',
     }
 
@@ -126,11 +133,34 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
 
   function renderPropertyCheckbox(propertyId: string, selected: boolean, onToggle: () => void) {
     const tile = getTile(propertyId)
+    const mortgaged = Boolean(properties?.[propertyId]?.mortgaged)
     return (
       <label key={propertyId} className="flex cursor-pointer items-center gap-3 rounded-md border border-[#e58a74]/30 bg-white/60 px-3 py-2 text-sm text-zinc-900 hover:border-[#d28b7a]">
         <input type="checkbox" checked={selected} onChange={onToggle} className="h-4 w-4 accent-emerald-700" />
         <span className="h-3 w-3 rounded-sm border border-black/10" style={{ backgroundColor: colorForGroup(tile?.colorGroup) }} />
         <span className="min-w-0 flex-1 truncate font-semibold">{propertyDisplayName(propertyId)}</span>
+        {mortgaged ? (
+          <span className="rounded bg-danger-surface px-1.5 py-0.5 text-[9px] font-bold uppercase text-danger">
+            Mortgaged — 10% fee
+          </span>
+        ) : null}
+      </label>
+    )
+  }
+
+  function renderJailCardInput(label: string, max: number, value: number, onChange: (next: number) => void) {
+    if (max <= 0) return null
+    return (
+      <label className="mt-3 block text-sm font-semibold text-zinc-700">
+        {label} (holds {max})
+        <input
+          type="number"
+          min={0}
+          max={max}
+          value={value}
+          onChange={(event) => onChange(Math.min(Math.max(Number.parseInt(event.target.value, 10) || 0, 0), max))}
+          className="mt-1 w-full rounded-md border border-[#d28b7a] bg-white px-3 py-2 text-zinc-900 outline-none focus:border-emerald-600"
+        />
       </label>
     )
   }
@@ -159,6 +189,7 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
                   setTargetPlayerId(player.id)
                   setRequestedProperties([])
                   setRequestedCashInput('0')
+                  setRequestedJailCards(0)
                 }}
                 className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-bold transition ${
                   targetPlayerId === player.id ? 'border-emerald-700 bg-emerald-50 text-emerald-900' : 'border-[#d28b7a]/40 bg-[#EFA38F]/30 text-zinc-800 hover:border-[#d28b7a]'
@@ -186,6 +217,7 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
                   className="mt-1 w-full rounded-md border border-[#d28b7a] bg-white px-3 py-2 text-zinc-900 outline-none focus:border-emerald-600"
                 />
               </label>
+              {renderJailCardInput('Get Out of Jail cards', selfPlayer?.getOutOfJailCards ?? 0, offeredJailCards, setOfferedJailCards)}
               <div className="mt-4 grid gap-2">
                 {ownTradableProperties.length === 0 ? <p className="text-sm text-zinc-700">No tradable properties.</p> : null}
                 {ownTradableProperties.map((propertyId) =>
@@ -209,6 +241,7 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
                   className="mt-1 w-full rounded-md border border-[#d28b7a] bg-white px-3 py-2 text-zinc-900 outline-none focus:border-emerald-600"
                 />
               </label>
+              {renderJailCardInput(`Get Out of Jail cards from ${targetPlayer.username}`, targetPlayer.getOutOfJailCards, requestedJailCards, setRequestedJailCards)}
               <div className="mt-4 grid gap-2">
                 {targetTradableProperties.length === 0 ? <p className="text-sm text-zinc-700">No tradable properties.</p> : null}
                 {targetTradableProperties.map((propertyId) =>

@@ -40,7 +40,6 @@ export function makeStorage(overrides: Partial<JsonStorage> = {}): JsonStorage {
     currentPlayerIndex: 0,
     players,
     properties,
-    bank: 20580,
     freeParkingPool: 0,
     chanceIndex: 0,
     communityChestIndex: 0,

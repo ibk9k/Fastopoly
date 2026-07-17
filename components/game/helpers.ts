@@ -63,8 +63,9 @@ export function propertyDisplayName(propertyId: string): string {
   return getTile(propertyId)?.name ?? propertyId
 }
 
+/** Buildings block a trade; mortgaged deeds are tradable (recipient pays 10% interest). */
 export function isTradableProperty(property: PropertyView | undefined): boolean {
-  return Boolean(property && !property.mortgaged && property.houses === 0 && property.hotels === 0)
+  return Boolean(property && property.houses === 0 && property.hotels === 0)
 }
 
 export function ownsFullColorGroup(playerId: string, propertyId: string, properties: PropertyLookup): boolean {

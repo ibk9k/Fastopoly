@@ -12,7 +12,8 @@ export type RollOutcome = {
   amount?: number
 }
 
-function inferCreditorId(storage: JsonStorage, player: Player): string | 'bank' {
+/** Best-effort creditor inference: whoever owns the tile the player sits on. */
+export function inferCreditorId(storage: JsonStorage, player: Player): string | 'bank' {
   const tile = BOARD[player.position]
   if (tile.type !== 'property' && tile.type !== 'railroad' && tile.type !== 'utility') {
     return 'bank'

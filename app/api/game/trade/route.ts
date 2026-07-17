@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { TradeOffer } from '@/lib/liveblocks.config'
 import type { JsonStorage } from '@/lib/liveblocks.config'
+import { getTile } from '@/lib/game-engine/board'
 import { AuthError, authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, broadcastRoomEvent, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
@@ -62,6 +63,16 @@ function validateTradeProposal(storage: JsonStorage, offer: TradeOffer): void {
   if (offer.requestedCash > toPlayer.cash) {
     throw new TradeValidationError('Requested cash exceeds target player cash')
   }
+
+  if ((offer.offeredJailCards ?? 0) > fromPlayer.getOutOfJailCards) {
+    throw new TradeValidationError('Proposer does not hold that many Get Out of Jail cards')
+  }
+  if ((offer.requestedJailCards ?? 0) > toPlayer.getOutOfJailCards) {
+    throw new TradeValidationError('Target does not hold that many Get Out of Jail cards')
+  }
+  if ((offer.offeredJailCards ?? 0) < 0 || (offer.requestedJailCards ?? 0) < 0) {
+    throw new TradeValidationError('Jail card counts cannot be negative')
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -110,20 +121,40 @@ export async function POST(req: NextRequest) {
 
       from.cash = from.cash - offer.offeredCash + offer.requestedCash
       to.cash = to.cash - offer.requestedCash + offer.offeredCash
+
+      // Receiving a mortgaged property costs 10% interest to the bank right away.
+      let fromInterest = 0
+      let toInterest = 0
       offer.offeredProperties.forEach((id) => {
         const property = properties.get(id)
-        if (property) property.ownerId = to.id
+        if (!property) return
+        property.ownerId = to.id
+        if (property.mortgaged) toInterest += Math.ceil((getTile(id)?.mortgage ?? 0) * 0.1)
       })
       offer.requestedProperties.forEach((id) => {
         const property = properties.get(id)
-        if (property) property.ownerId = from.id
+        if (!property) return
+        property.ownerId = from.id
+        if (property.mortgaged) fromInterest += Math.ceil((getTile(id)?.mortgage ?? 0) * 0.1)
       })
+      from.cash -= fromInterest
+      to.cash -= toInterest
+
+      // Get Out of Jail cards change hands too.
+      const offeredCards = offer.offeredJailCards ?? 0
+      const requestedCards = offer.requestedJailCards ?? 0
+      from.getOutOfJailCards = from.getOutOfJailCards - offeredCards + requestedCards
+      to.getOutOfJailCards = to.getOutOfJailCards - requestedCards + offeredCards
+
       from.properties = [...from.properties.filter((id) => !offer.offeredProperties.includes(id)), ...offer.requestedProperties]
       to.properties = [...to.properties.filter((id) => !offer.requestedProperties.includes(id)), ...offer.offeredProperties]
       storage.properties = toPropertyRecord(properties)
       storage.tradeOffer = null
       storage.gamePhase = 'playing'
       addLog(storage, 'Trade accepted.')
+      if (fromInterest > 0 || toInterest > 0) {
+        addLog(storage, `Mortgage transfer interest paid: ${[fromInterest > 0 ? `${from.username} $${fromInterest}` : '', toInterest > 0 ? `${to.username} $${toInterest}` : ''].filter(Boolean).join(', ')}.`)
+      }
     })
 
     if (event) await broadcastRoomEvent(body.roomId, event)
