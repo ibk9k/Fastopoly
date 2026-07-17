@@ -144,6 +144,19 @@ export default function Tile({ tile, property, owner, gridPos, onClick }: TilePr
       }`}
       style={{ ...gridStyle, ...paddingStyle, boxShadow: shadowValue }}
       onClick={isPurchasable ? onClick : undefined}
+      onKeyDown={
+        isPurchasable
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
+      role={isPurchasable ? 'button' : undefined}
+      tabIndex={isPurchasable ? 0 : undefined}
+      aria-label={isPurchasable ? `View ${tile.name}` : undefined}
       onMouseEnter={!isPurchasable ? () => setShowTooltip(true) : undefined}
       onMouseLeave={!isPurchasable ? () => setShowTooltip(false) : undefined}
     >

@@ -68,8 +68,9 @@ export default function PlayerDashboard({ roomId }: PlayerDashboardProps) {
             return (
               <div
                 key={player.id}
+                aria-current={isActive ? 'true' : undefined}
                 className={`rounded-md border bg-white/40 backdrop-blur-sm transition ${
-                  isActive ? 'border-emerald-700 shadow-[0_0_0_1px_rgba(26,71,42,.25)]' : 'border-[#e58a74]/30'
+                  isActive ? 'border-pine shadow-[0_0_0_1px_rgba(47,77,32,.25)]' : 'border-salmon-line/40'
                 } ${player.isBankrupt ? 'opacity-50' : ''}`}
               >
                 <button

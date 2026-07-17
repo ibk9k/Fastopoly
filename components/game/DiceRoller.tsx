@@ -51,7 +51,7 @@ export default function DiceRoller({
     onClick?.()
   }
 
-  const isClickable = onClick && !isRolling && !disabled
+  const isClickable = Boolean(onClick) && !isRolling && !disabled
 
   const sceneProps: DiceSceneProps = {
     rollTrigger,
@@ -60,29 +60,41 @@ export default function DiceRoller({
     onRollComplete: handleRollComplete,
   }
 
-  return (
+  const inner = (
     <div
-      onClick={isClickable ? handleLocalClick : undefined}
-      className={`flex flex-col items-center justify-center select-none transition-all duration-200 ${
-        isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
-      }`}
+      className="relative flex items-center justify-center"
+      style={{ width: `calc(${sizeValue} * 3.2)`, height: canvasHeight }}
     >
-      <div
-        className="relative flex items-center justify-center"
-        style={{ width: `calc(${sizeValue} * 3.2)`, height: canvasHeight }}
-      >
-        {glow && (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 animate-pulse rounded-full"
-            style={{
-              background:
-                'radial-gradient(circle, rgba(255,235,120,0.55) 0%, rgba(255,235,120,0) 70%)',
-            }}
-          />
-        )}
-        <DiceCanvas {...sceneProps} />
-      </div>
+      {glow && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 animate-pulse rounded-full"
+          style={{
+            background: 'radial-gradient(circle, rgba(255,235,120,0.55) 0%, rgba(255,235,120,0) 70%)',
+          }}
+        />
+      )}
+      <DiceCanvas {...sceneProps} />
     </div>
   )
+
+  // A real button when it can roll (keyboard + screen-reader operable), a plain
+  // presentational div otherwise — so the dice are never a focusable dead control.
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={handleLocalClick}
+        disabled={!isClickable}
+        aria-label={isRolling ? 'Rolling the dice' : 'Roll the dice'}
+        className={`flex select-none flex-col items-center justify-center rounded-2xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-pine focus-visible:ring-offset-2 ${
+          isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
+        }`}
+      >
+        {inner}
+      </button>
+    )
+  }
+
+  return <div className="flex select-none flex-col items-center justify-center opacity-90">{inner}</div>
 }

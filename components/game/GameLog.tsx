@@ -67,10 +67,16 @@ export default function GameLog() {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [entries.length])
 
+  const latestMessage = entries.length ? entries[entries.length - 1].message : ''
+
   return (
-    <section className="rounded-lg border border-[#e58a74]/40 bg-[#EFA38F] p-4 shadow-sm">
+    <section className="rounded-lg border border-salmon-line/60 bg-salmon p-4 shadow-card">
+      {/* Announces each new game event (turn, roll, rent, card) to screen readers. */}
+      <p className="sr-only" aria-live="polite">
+        {latestMessage}
+      </p>
       <div className="flex items-center justify-between">
-        <h2 className="font-black text-zinc-900">Log</h2>
+        <h2 className="font-display uppercase tracking-wide text-zinc-900">Log</h2>
         <p className="text-xs text-zinc-700">{entries.length} entries</p>
       </div>
       <div className="mt-4 max-h-72 overflow-y-auto pr-1">
