@@ -59,6 +59,7 @@ export default function DiceScene({
   startRollSignal = 0,
 }: DiceSceneProps) {
   const invalidate = useThree((state) => state.invalidate)
+  const gl = useThree((state) => state.gl)
   const die1GroupRef = useRef<THREE.Group>(null)
   const die2GroupRef = useRef<THREE.Group>(null)
   const die1Ref = useRef(createDieState(rollTrigger?.d1 ?? 3))
@@ -129,6 +130,26 @@ export default function DiceScene({
     targetRef.current = null
     beginRoll()
   }, [startRollSignal, beginRoll])
+
+  // Recover from WebGL context loss (common when a tab is backgrounded for a while):
+  // preventDefault lets the browser restore it, and we force a repaint on restore /
+  // when the tab becomes visible — otherwise frameloop="demand" leaves stale/black dice.
+  useEffect(() => {
+    const canvas = gl.domElement
+    const onContextLost = (event: Event) => event.preventDefault()
+    const onContextRestored = () => invalidate()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') invalidate()
+    }
+    canvas.addEventListener('webglcontextlost', onContextLost as EventListener, false)
+    canvas.addEventListener('webglcontextrestored', onContextRestored, false)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      canvas.removeEventListener('webglcontextlost', onContextLost as EventListener)
+      canvas.removeEventListener('webglcontextrestored', onContextRestored)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [gl, invalidate])
 
   function applyGroupTransforms() {
     die1GroupRef.current?.quaternion.copy(die1Ref.current.quaternion)

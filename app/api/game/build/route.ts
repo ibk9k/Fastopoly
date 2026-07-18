@@ -4,7 +4,7 @@ import { hasFullColorGroup } from '@/lib/game-engine/actions'
 import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
-import { addLog, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
+import { addLog, mutateGameStorage, propertyMap, refreshTurnDeadline, toPropertyRecord } from '@/lib/game-engine/server-state'
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
       if (!tile || !property) throw new Error('Invalid player or property')
       if (property.ownerId !== player.id) throw new Error('Player does not own property')
       if (!hasFullColorGroup(player.id, propertyId, properties)) throw new Error('Full color group required')
+      // Active property management keeps the auto-play timer at bay.
+      refreshTurnDeadline(storage)
 
       const groupIds = COLOR_GROUPS[tile.colorGroup ?? ''] ?? []
       const group = groupIds.map((id) => properties.get(id)).filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))

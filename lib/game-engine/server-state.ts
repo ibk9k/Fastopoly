@@ -206,8 +206,8 @@ export function propertyMap(properties: Record<string, Property>): Map<string, P
   return new Map(Object.entries(properties))
 }
 
-/** How long the current player has to act before any peer can auto-skip them. */
-export const TURN_TIMEOUT_MS = 90_000
+/** How long the current player has to roll/act before any peer auto-plays for them. */
+export const TURN_TIMEOUT_MS = 25_000
 
 export function refreshTurnDeadline(storage: JsonStorage): void {
   storage.turnDeadline = Date.now() + TURN_TIMEOUT_MS

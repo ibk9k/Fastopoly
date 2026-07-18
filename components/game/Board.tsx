@@ -44,13 +44,21 @@ export default function Board() {
 
   function waitForDiceRollComplete(): Promise<void> {
     return new Promise((resolve) => {
-      rollCompleteResolverRef.current = resolve
+      const finish = () => {
+        rollCompleteResolverRef.current = null
+        resolve()
+      }
+      rollCompleteResolverRef.current = finish
+      // Failsafe: the server has already resolved the roll, so the animation is
+      // purely cosmetic. If it never reports completion — e.g. the tab was
+      // backgrounded and the WebGL context stalled — don't leave isRolling (and
+      // therefore the dice) stuck. 3.5s comfortably exceeds a normal ~1.9s roll.
+      window.setTimeout(finish, 3500)
     })
   }
 
   function handleDiceRollComplete() {
     rollCompleteResolverRef.current?.()
-    rollCompleteResolverRef.current = null
   }
 
   const canRoll = Boolean(selfPlayer && gamePhase === 'playing' && isActivePlayer && !isRolling && !hasRolled && (selfPlayer.cash ?? 0) >= 0)

@@ -19,29 +19,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required lobby fields' }, { status: 400 })
     }
 
-    const { error } = await supabaseAdmin.from('public_rooms').insert({
-      id: body.roomCode,
-      host_username: body.username,
-      map_type: body.mapType,
-      player_count: 1,
-      max_players: body.rules.maxPlayers ?? 4,
-      rules: body.rules,
-      status: body.isPublic ? 'waiting' : 'private',
-    })
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    // Best-effort cleanup of rooms that have sat unused in the waiting list for hours.
-    try {
-      const staleCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
-      await supabaseAdmin.from('public_rooms').delete().eq('status', 'waiting').lt('last_active_at', staleCutoff)
-    } catch {
-      // Non-fatal — cleanup is opportunistic.
-    }
-
-    // Seed the Liveblocks storage server-side so clients don't need write access to bootstrap it.
     const rules: GameRules = {
       startingCash: body.rules?.startingCash ?? 1500,
       freeParkingJackpot: body.rules?.freeParkingJackpot ?? false,
@@ -49,7 +26,34 @@ export async function POST(req: NextRequest) {
       speedDie: body.rules?.speedDie ?? false,
       maxPlayers: body.rules?.maxPlayers ?? 4,
     }
-    await seedLobbyStorage(body.roomCode, rules, body.mapType)
+
+    // The Supabase row, the Liveblocks storage seed, and the opportunistic stale-room
+    // cleanup are all independent — run them concurrently so create isn't the sum of
+    // three round-trips. Seeding (two Liveblocks calls) is the long pole; the client
+    // needs the seed before it can read the room, so we still wait for it.
+    const staleCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+    const [{ error }] = await Promise.all([
+      supabaseAdmin.from('public_rooms').insert({
+        id: body.roomCode,
+        host_username: body.username,
+        map_type: body.mapType,
+        player_count: 1,
+        max_players: body.rules.maxPlayers ?? 4,
+        rules: body.rules,
+        status: body.isPublic ? 'waiting' : 'private',
+      }),
+      seedLobbyStorage(body.roomCode, rules, body.mapType),
+      supabaseAdmin
+        .from('public_rooms')
+        .delete()
+        .eq('status', 'waiting')
+        .lt('last_active_at', staleCutoff)
+        .then(() => undefined, () => undefined), // best-effort, never blocks the create
+    ])
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     // Issue the host token to the creator only. It gates host-only routes (init, end).
     const hostToken = signGameToken(body.roomCode, HOST_SUBJECT)

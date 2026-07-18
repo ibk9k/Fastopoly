@@ -45,7 +45,7 @@ export default function TurnTimer({ roomId, selfPlayerId, isActivePlayer }: Turn
   if (!runnablePhase || turnDeadline === 0) return null
 
   const seconds = Math.max(0, Math.ceil(remainingMs / 1000))
-  const urgent = seconds <= 15
+  const urgent = seconds <= 8
   const label = isActivePlayer ? 'Your turn' : 'Turn'
 
   return (

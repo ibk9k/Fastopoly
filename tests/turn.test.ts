@@ -132,6 +132,9 @@ describe('applyRoll — utility rent uses the server dice', () => {
 })
 
 describe('enforceTurnTimeout', () => {
+  // Deterministic dice so the auto-roll outcome is assertable.
+  const fixedDice = (d1: number, d2: number) => (): [number, number] => [d1, d2]
+
   it('does nothing before the deadline', () => {
     const storage = makeStorage({
       players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
@@ -141,23 +144,52 @@ describe('enforceTurnTimeout', () => {
     expect(storage.currentPlayerIndex).toBe(0)
   })
 
-  it('skips an idle player once the deadline passes', () => {
+  it('auto-ROLLS for an idle player (not a bare skip) and then ends their turn', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 0 })
     const storage = makeStorage({
-      players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
+      players: [p0, makePlayer({ id: 'player-1' })],
       turnDeadline: 1,
       hasRolled: false,
     })
-    expect(enforceTurnTimeout(storage)).toBe(true)
-    expect(storage.currentPlayerIndex).toBe(1) // turn passed
+    const events: RoomEvent[] = []
+    expect(enforceTurnTimeout(storage, events, fixedDice(2, 3))).toBe(true)
+    expect(p0.position).toBe(5) // actually moved by the auto-roll, not left in place
+    expect(storage.lastDiceRoll.d1).toBe(2)
+    expect(storage.currentPlayerIndex).toBe(1) // turn then passed
+    expect(events.some((e) => e.type === 'DICE_ROLLED')).toBe(true)
   })
 
-  it('does not grant a doubles re-roll when skipping', () => {
+  it('does not grant a doubles re-roll when auto-rolling', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 0 })
+    const storage = makeStorage({
+      players: [p0, makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+      hasRolled: false,
+    })
+    enforceTurnTimeout(storage, [], fixedDice(3, 3)) // doubles
+    expect(storage.currentPlayerIndex).toBe(1) // still advances, no bonus roll
+  })
+
+  it('auto-passes a buy decision when the idle player rolls onto an unowned property', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 1 }) // 1 + 2 -> Baltic (unowned)
+    const storage = makeStorage({
+      players: [p0, makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+      hasRolled: false,
+    })
+    enforceTurnTimeout(storage, [], fixedDice(1, 1))
+    expect(storage.properties['baltic-avenue'].ownerId).toBeNull() // did not buy
+    expect(storage.currentPlayerIndex).toBe(1)
+  })
+
+  it('ends the turn for a player who rolled but idled on the decision', () => {
     const storage = makeStorage({
       players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
       turnDeadline: 1,
-      lastRollWasDoubles: true,
+      hasRolled: true,
+      gamePhase: 'buy_decision',
     })
-    enforceTurnTimeout(storage)
+    expect(enforceTurnTimeout(storage)).toBe(true)
     expect(storage.currentPlayerIndex).toBe(1)
   })
 
@@ -169,6 +201,19 @@ describe('enforceTurnTimeout', () => {
     })
     expect(enforceTurnTimeout(storage)).toBe(true)
     expect(debtor.isBankrupt).toBe(true)
+  })
+
+  it('auto-attempts a jail roll for an away jailed player (no doubles = stay, turn passes)', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 10, inJail: true, jailTurns: 0 })
+    const storage = makeStorage({
+      players: [p0, makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+      hasRolled: false,
+    })
+    enforceTurnTimeout(storage, [], fixedDice(2, 5)) // not doubles
+    expect(p0.inJail).toBe(true)
+    expect(p0.jailTurns).toBe(1)
+    expect(storage.currentPlayerIndex).toBe(1)
   })
 
   it('leaves an active auction alone', () => {

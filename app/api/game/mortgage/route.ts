@@ -3,7 +3,7 @@ import { getTile } from '@/lib/game-engine/board'
 import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
-import { addLog, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
+import { addLog, mutateGameStorage, propertyMap, refreshTurnDeadline, toPropertyRecord } from '@/lib/game-engine/server-state'
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       const player = authenticatePlayer(storage, roomId, playerId, token)
       assertGamePhase(storage, ['playing', 'landed', 'buy_decision'])
       assertIsActivePlayer(storage, player.id)
+      refreshTurnDeadline(storage)
       const tile = getTile(propertyId)
       const properties = propertyMap(storage.properties)
       const property = properties.get(propertyId)

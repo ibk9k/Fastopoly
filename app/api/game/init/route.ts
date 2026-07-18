@@ -37,9 +37,12 @@ export async function POST(req: NextRequest) {
       getOutOfJailCards: 0,
     }))
     storage.properties = initialProperties()
-    storage.currentPlayerIndex = 0
+    // Randomize who goes first rather than always the host.
+    storage.currentPlayerIndex = Math.floor(Math.random() * storage.players.length)
     refreshTurnDeadline(storage)
     addLog(storage, 'Game started!')
+    const firstPlayer = storage.players[storage.currentPlayerIndex]
+    if (firstPlayer) addLog(storage, `${firstPlayer.username} goes first.`)
 
     try {
       await initializeGameStorage(body.roomId, storage)

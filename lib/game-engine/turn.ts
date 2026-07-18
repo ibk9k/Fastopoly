@@ -3,7 +3,7 @@ import { BOARD, getTile } from './board'
 import { CHANCE_CARDS, COMMUNITY_CHEST_CARDS } from './cards'
 import { activePlayer, applyCard, resolveLanding, sendToJail } from './actions'
 import { executeBankruptcy } from './bankruptcy'
-import { addLog, endTurn, handlePostLanding, propertyMap, toPropertyRecord } from './server-state'
+import { addLog, endTurn, handlePostLanding, propertyMap, refreshTurnDeadline, toPropertyRecord } from './server-state'
 
 export type RollOutcome = {
   dice: [number, number]
@@ -100,6 +100,8 @@ export function applyRoll(storage: JsonStorage, d1: number, d2: number, events: 
   storage.hasRolled = true
   storage.lastRollWasDoubles = isDoubles
   storage.consecutiveDoubles = isDoubles ? (storage.consecutiveDoubles ?? 0) + 1 : 0
+  // Rolling earns a fresh window for the post-roll decisions (buy/build/end).
+  refreshTurnDeadline(storage)
 
   if (isDoubles && (storage.consecutiveDoubles ?? 0) >= 3) {
     // No movement on the third doubles — stage on the tile they were standing on.
@@ -125,13 +127,48 @@ export function applyRoll(storage: JsonStorage, d1: number, d2: number, events: 
   return { dice: [d1, d2], newPosition: player.position, landedOn: nextPosition, passedGo, ...result }
 }
 
+function defaultDice(): [number, number] {
+  return [Math.floor(Math.random() * 6) + 1, Math.floor(Math.random() * 6) + 1]
+}
+
+/**
+ * After an auto-roll, if it is still the same player's turn (the landing didn't
+ * already jail them or end the game), end it — an away player doesn't buy a
+ * property or take a doubles re-roll. If auto-rolled rent left them insolvent
+ * (they can't liquidate while away), declare bankruptcy so the game keeps moving.
+ */
+function autoEndTurn(storage: JsonStorage, startIndex: number): void {
+  if (storage.gamePhase === 'ended') return
+  // A go-to-jail / third-double landing already advanced the turn inside resolveLanding.
+  if (storage.currentPlayerIndex !== startIndex) return
+
+  const player = storage.players[startIndex]
+  if (!player) return
+
+  if (player.cash < 0 && !player.isBankrupt) {
+    addLog(storage, `${player.username} could not cover the payment and went bankrupt.`)
+    executeBankruptcy(storage, player, inferCreditorId(storage, player))
+  }
+
+  storage.gamePhase = 'playing'
+  storage.lastRollWasDoubles = false
+  storage.consecutiveDoubles = 0
+  endTurn(storage)
+}
+
 /**
  * Auto-completes the current player's turn once their deadline passes, so an
- * absent player can never stall the game. Any seated peer triggers this (the
- * server clock decides), mirroring the auction-resolution pattern. Returns
+ * absent player can never stall the game. Rather than skipping (which unfairly
+ * denies them their movement and any Go money), it AUTO-ROLLS on their behalf,
+ * resolves the landing, and passes any buy decision. Any seated peer triggers
+ * this; the server clock decides and the transaction is idempotent. Returns
  * false when there is nothing to enforce yet.
  */
-export function enforceTurnTimeout(storage: JsonStorage): boolean {
+export function enforceTurnTimeout(
+  storage: JsonStorage,
+  events: RoomEvent[] = [],
+  rollDice: () => [number, number] = defaultDice,
+): boolean {
   if (storage.gamePhase === 'lobby' || storage.gamePhase === 'ended' || storage.gamePhase === 'auction') {
     return false
   }
@@ -140,7 +177,9 @@ export function enforceTurnTimeout(storage: JsonStorage): boolean {
 
   const player = storage.players[storage.currentPlayerIndex]
   if (!player) return false
+  const startIndex = storage.currentPlayerIndex
 
+  // Already in debt (owed rent they never covered) — an away player can't liquidate.
   if (player.cash < 0 && !player.isBankrupt) {
     addLog(storage, `${player.username} ran out of time in debt and was declared bankrupt.`)
     executeBankruptcy(storage, player, inferCreditorId(storage, player))
@@ -149,8 +188,53 @@ export function enforceTurnTimeout(storage: JsonStorage): boolean {
     return true
   }
 
-  addLog(storage, `${player.username} ran out of time — their turn was skipped.`)
-  // Collapse any pending landing decision into a pass, and never grant a doubles re-roll.
+  // Jailed and hasn't taken a jail action → auto-attempt the jail roll.
+  if (player.inJail && !storage.hasRolled) {
+    const [d1, d2] = rollDice()
+    const total = d1 + d2
+    storage.lastDiceRoll = { d1, d2, timestamp: Date.now(), playerId: player.id }
+    storage.hasRolled = true
+    storage.lastRollWasDoubles = false
+    storage.consecutiveDoubles = 0
+    events.push({ type: 'DICE_ROLLED', playerId: player.id, dice: [d1, d2] })
+
+    const leaveJailAndMove = (message: string) => {
+      player.inJail = false
+      player.jailTurns = 0
+      player.position = (player.position + total) % BOARD.length
+      storage.lastDiceRoll.landedOn = player.position
+      addLog(storage, message)
+      resolveCurrentTile(storage, player, total, events)
+      autoEndTurn(storage, startIndex)
+    }
+
+    if (d1 === d2) {
+      leaveJailAndMove(`${player.username} (away) rolled doubles and left jail.`)
+    } else {
+      player.jailTurns += 1
+      if (player.jailTurns >= 3) {
+        player.cash -= 50
+        leaveJailAndMove(`${player.username} (away) served their time, paid $50, and moved on.`)
+      } else {
+        addLog(storage, `${player.username} (away) failed to roll doubles in jail.`)
+        endTurn(storage)
+      }
+    }
+    return true
+  }
+
+  // Not rolled yet → roll for them, resolve the landing, then end the turn.
+  if (!storage.hasRolled) {
+    const [d1, d2] = rollDice()
+    events.push({ type: 'DICE_ROLLED', playerId: player.id, dice: [d1, d2] })
+    addLog(storage, `${player.username} ran out of time — rolling automatically.`)
+    applyRoll(storage, d1, d2, events)
+    autoEndTurn(storage, startIndex)
+    return true
+  }
+
+  // Already rolled but idling on a decision (buy/build) → pass it and end the turn.
+  addLog(storage, `${player.username} ran out of time — turn ended.`)
   storage.gamePhase = 'playing'
   storage.lastRollWasDoubles = false
   storage.consecutiveDoubles = 0
