@@ -38,8 +38,6 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, pla
     return { propertyId: tile.id, name: tile.name, price: tile.price ?? 0 }
   }, [gamePhase, activePlayer, properties])
 
-  const isInDebt = Boolean(selfPlayer && selfPlayer.cash < 0)
-
   const wrapperClass = placement === 'sidebar' ? 'hidden lg:block' : 'lg:hidden'
   const panelClass =
     placement === 'sidebar'
@@ -114,11 +112,7 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, pla
         </div>
 
         {pendingBuy ? <p className="mt-3 text-sm font-semibold text-zinc-800">{pendingBuy.name} is available.</p> : null}
-        {isInDebt && isActivePlayer ? (
-          <p className="mt-3 text-sm font-extrabold text-danger" role="alert">
-            You are in debt ({formatMoney(selfPlayer!.cash)}). Mortgage properties, sell houses, or declare bankruptcy.
-          </p>
-        ) : null}
+        {/* The debt warning is surfaced as a center-screen DebtOverlay (mounted in GameBoard). */}
       </section>
 
       {showBankruptConfirm ? (

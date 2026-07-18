@@ -10,6 +10,10 @@ type TurnTimerProps = {
   isActivePlayer: boolean
 }
 
+function formatClock(seconds: number): string {
+  return seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : `${seconds}s`
+}
+
 const GRACE_MS = 2000
 
 /**
@@ -56,7 +60,7 @@ export default function TurnTimer({ roomId, selfPlayerId, isActivePlayer }: Turn
       aria-live="off"
     >
       <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${urgent ? 'animate-pulse bg-danger' : 'bg-pine/50'}`} />
-      {label} · {seconds}s
+      {label} · {formatClock(seconds)}
     </div>
   )
 }

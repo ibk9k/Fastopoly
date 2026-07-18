@@ -1,7 +1,40 @@
 import { describe, expect, it } from 'vitest'
-import { endTurn, handlePostLanding } from '@/lib/game-engine/server-state'
+import { DEBT_TIMEOUT_MS, TURN_TIMEOUT_MS, endTurn, handlePostLanding, refreshTurnDeadline } from '@/lib/game-engine/server-state'
 import { resolveLanding } from '@/lib/game-engine/actions'
-import { makePlayer, makeStorage } from './factories'
+import { makePlayer, makeProperty, makeStorage } from './factories'
+
+describe('turn deadline — debt window', () => {
+  it('gives a solvent active player the normal turn window', () => {
+    const storage = makeStorage({ players: [makePlayer({ id: 'player-0', cash: 500 })] })
+    refreshTurnDeadline(storage)
+    const remaining = (storage.turnDeadline ?? 0) - Date.now()
+    expect(remaining).toBeGreaterThan(TURN_TIMEOUT_MS - 1000)
+    expect(remaining).toBeLessThan(TURN_TIMEOUT_MS + 1000)
+  })
+
+  it('gives an in-debt active player the longer debt window (1:20)', () => {
+    const storage = makeStorage({ players: [makePlayer({ id: 'player-0', cash: -344 })] })
+    refreshTurnDeadline(storage)
+    const remaining = (storage.turnDeadline ?? 0) - Date.now()
+    expect(DEBT_TIMEOUT_MS).toBe(80_000)
+    expect(remaining).toBeGreaterThan(DEBT_TIMEOUT_MS - 1000)
+  })
+
+  it('extends the deadline to the debt window when rent drives the player negative', () => {
+    const props = makePropertyMapWithOwnedBoardwalk()
+    const payer = makePlayer({ id: 'player-0', position: 39, cash: 20 }) // Boardwalk, can't afford rent
+    const owner = makePlayer({ id: 'player-1', cash: 100 })
+    const storage = makeStorage({ players: [payer, owner], properties: props })
+    resolveLanding(storage, payer) // pays $50 rent -> cash -30, handlePostLanding refreshes deadline
+    expect(payer.cash).toBeLessThan(0)
+    const remaining = (storage.turnDeadline ?? 0) - Date.now()
+    expect(remaining).toBeGreaterThan(TURN_TIMEOUT_MS + 1000) // longer than a normal turn
+  })
+})
+
+function makePropertyMapWithOwnedBoardwalk() {
+  return { boardwalk: makeProperty('boardwalk', { ownerId: 'player-1' }) }
+}
 
 describe('endTurn — win detection', () => {
   it('ends the game when only one non-bankrupt player remains', () => {

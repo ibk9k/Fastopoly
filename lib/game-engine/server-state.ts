@@ -208,9 +208,14 @@ export function propertyMap(properties: Record<string, Property>): Map<string, P
 
 /** How long the current player has to roll/act before any peer auto-plays for them. */
 export const TURN_TIMEOUT_MS = 25_000
+/** A player who has gone into debt gets a longer window (1 min 20 s) to raise funds
+ * or declare bankruptcy before they are auto-bankrupted. */
+export const DEBT_TIMEOUT_MS = 80_000
 
 export function refreshTurnDeadline(storage: JsonStorage): void {
-  storage.turnDeadline = Date.now() + TURN_TIMEOUT_MS
+  const active = storage.players[storage.currentPlayerIndex]
+  const inDebt = Boolean(active && active.cash < 0 && !active.isBankrupt)
+  storage.turnDeadline = Date.now() + (inDebt ? DEBT_TIMEOUT_MS : TURN_TIMEOUT_MS)
 }
 
 export function endTurn(storage: JsonStorage): void {
@@ -268,6 +273,9 @@ export function handlePostLanding(storage: JsonStorage): void {
     }
   }
   storage.gamePhase = 'playing'
+  // Recompute the deadline now the landing is resolved: a player driven into debt
+  // by rent/tax earns the longer debt window before auto-bankruptcy.
+  refreshTurnDeadline(storage)
 }
 
 export function toPropertyRecord(properties: Map<string, Property>): Record<string, Property> {

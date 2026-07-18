@@ -13,6 +13,7 @@ import PropertyManager from '@/components/game/PropertyManager'
 import TradeOfferModal from '@/components/game/TradeOfferModal'
 import TradePanel from '@/components/game/TradePanel'
 import TurnTimer from '@/components/game/TurnTimer'
+import DebtOverlay from '@/components/game/DebtOverlay'
 import LobbySettings from '@/components/lobby/LobbySettings'
 import PlayerList from '@/components/lobby/PlayerList'
 import Modal from '@/components/ui/Modal'
@@ -248,6 +249,7 @@ export default function GameBoard() {
         <>
           {/* Always mounted (not inside a hidden rail) so the timer keeps enforcing on every viewport. */}
           <TurnTimer roomId={roomId} selfPlayerId={selfPlayer?.id} isActivePlayer={activePlayer?.id === selfPlayer?.id} />
+          <DebtOverlay roomId={roomId} onManage={() => setPropertiesOpen(true)} />
           <ActionPanel roomId={roomId} onOpenTrade={() => setTradeOpen(true)} onOpenProperties={() => setPropertiesOpen(true)} placement="mobile" />
         </>
       ) : null}

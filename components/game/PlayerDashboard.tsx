@@ -5,7 +5,12 @@ import PropertyManager from '@/components/game/PropertyManager'
 import PropertyDetailModal from '@/components/game/PropertyDetailModal'
 import { calculatePlayerNetWorth, colorForGroup, formatMoney, playerIdFromConnection, resolveLocalPlayer } from '@/components/game/helpers'
 import { getTile } from '@/lib/game-engine/board'
+import { useCountdown } from '@/hooks/useCountdown'
 import { useOthers, useSelf, useStorage } from '@/lib/liveblocks.config'
+
+function formatClock(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
 
 type PlayerDashboardProps = {
   roomId: string
@@ -16,8 +21,13 @@ export default function PlayerDashboard({ roomId }: PlayerDashboardProps) {
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
   const properties = useStorage((root) => root.properties)
   const currentPlayerIndex = useStorage((root) => root.currentPlayerIndex) ?? 0
+  const gamePhase = useStorage((root) => root.gamePhase)
+  const turnDeadline = useStorage((root) => root.turnDeadline)
   const others = useOthers()
   const self = useSelf()
+
+  const timerRunning = gamePhase === 'playing' || gamePhase === 'buy_decision' || gamePhase === 'landed'
+  const secondsLeft = useCountdown(timerRunning ? turnDeadline : null)
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
 
@@ -91,6 +101,16 @@ export default function PlayerDashboard({ roomId }: PlayerDashboardProps) {
                         <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-success' : 'bg-amber-500'}`} />
                         {isConnected ? 'Connected' : 'Away'}
                       </p>
+                      {isActive && !player.isBankrupt && secondsLeft !== null ? (
+                        <p
+                          className={`mt-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide ${
+                            player.cash < 0 || secondsLeft <= 8 ? 'text-danger' : 'text-pine/70'
+                          }`}
+                        >
+                          <span aria-hidden>⏱</span>
+                          {player.cash < 0 ? 'Debt' : 'Turn'} · {formatClock(secondsLeft)}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <p className="font-black text-zinc-900">{formatMoney(player.cash)}</p>
