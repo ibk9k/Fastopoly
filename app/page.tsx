@@ -38,13 +38,13 @@ function HomePageInner() {
   }, [searchParams])
 
   const signedIn = Boolean(user)
-  const activeUsername = profile?.username ?? (signedIn ? null : name.trim() || null)
 
-  // Auto-detect if user is already in an active game and redirect directly into it
+  // Auto-detect if user is already in an active game and redirect directly into it.
+  // Keyed on the session server-side, so it only runs once signed in.
   useEffect(() => {
-    if (!ready || !activeUsername) return
+    if (!ready || !signedIn) return
     let isMounted = true
-    fetch(`/api/lobby/active-user-room?username=${encodeURIComponent(activeUsername)}`)
+    fetch('/api/lobby/active-user-room')
       .then((res) => res.json())
       .then((data: { activeRoomId?: string | null }) => {
         if (!isMounted) return
@@ -57,7 +57,7 @@ function HomePageInner() {
     return () => {
       isMounted = false
     }
-  }, [ready, activeUsername, router])
+  }, [ready, signedIn, router])
 
   async function handleGuest() {
     const trimmed = name.trim()

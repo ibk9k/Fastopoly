@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { getStoredUsername } from '@/lib/game-client/tokens'
-import { supabase } from '@/lib/supabase/client'
 
 type PublicRoom = {
   id: string
@@ -21,12 +20,11 @@ export default function JoinLobbyPage() {
   const [loadingRooms, setLoadingRooms] = useState(true)
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
 
-  // Auto-detect if user has an active room in progress and redirect directly
+  // Auto-detect if user has an active room in progress and redirect directly.
+  // The route reads identity from the session cookie.
   useEffect(() => {
-    const currentUsername = getStoredUsername()
-    if (!currentUsername) return
     let isMounted = true
-    fetch(`/api/lobby/active-user-room?username=${encodeURIComponent(currentUsername)}`)
+    fetch('/api/lobby/active-user-room')
       .then((res) => res.json())
       .then((data: { activeRoomId?: string | null }) => {
         if (!isMounted) return

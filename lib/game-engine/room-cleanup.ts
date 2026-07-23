@@ -73,24 +73,27 @@ export async function touchRoomActivity(roomId: string): Promise<void> {
 }
 
 /**
- * Checks if a user is currently active in any game room other than `excludeRoomId`.
- * Returns the room code of the active room if found, or null if the user is free.
+ * Checks whether a user is currently active in any game room other than `excludeRoomId`.
+ * Returns that room's code, or null if the user is free to join/create.
+ *
+ * Keyed on the Supabase auth uid, NOT the display name: usernames are deliberately
+ * non-unique, so name-matching let two players called "Alex" lock each other out of
+ * the lobby. A room matches when the caller either hosts it (public_rooms.host_user_id)
+ * or holds a live seat in it (player.authUserId).
  */
 export async function findActiveUserRoom(
-  username: string,
+  authUserId: string,
   excludeRoomId?: string,
 ): Promise<string | null> {
-  if (!username) return null
-  const normalized = username.trim().toLowerCase()
-  if (!normalized) return null
+  if (!authUserId) return null
 
   const cutoffTime = new Date(Date.now() - INACTIVITY_THRESHOLD_MS).toISOString()
 
   // 1. Fetch active rooms from public_rooms
   const { data: activeRooms, error } = await supabaseAdmin
     .from('public_rooms')
-    .select('id, host_username, status')
-    .in('status', ['waiting', 'playing'])
+    .select('id, host_user_id, status')
+    .in('status', ['waiting', 'playing', 'private'])
     .gte('last_active_at', cutoffTime)
 
   if (error || !activeRooms || activeRooms.length === 0) {
@@ -105,18 +108,16 @@ export async function findActiveUserRoom(
       continue
     }
 
-    // Check host username match
-    if (room.host_username && room.host_username.trim().toLowerCase() === normalized) {
+    // Host of a room they created but may not have taken a seat in yet.
+    if (room.host_user_id && room.host_user_id === authUserId) {
       return room.id
     }
 
-    // Check Liveblocks storage for non-bankrupt seated players
+    // Check Liveblocks storage for a live (non-bankrupt) seat owned by this uid.
     try {
       const storage = await readGameStorage(room.id).catch(() => null)
       if (storage && storage.gamePhase !== 'ended' && storage.players) {
-        const isSeated = storage.players.some(
-          (p) => !p.isBankrupt && p.username.trim().toLowerCase() === normalized,
-        )
+        const isSeated = storage.players.some((p) => !p.isBankrupt && p.authUserId === authUserId)
         if (isSeated) {
           return room.id
         }

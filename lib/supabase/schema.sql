@@ -1,6 +1,6 @@
 -- Fastopoly schema. Applied to the live project via Supabase migrations:
 --   public_rooms_last_active_and_rls, accounts_profiles_and_stats,
---   restrict_handle_new_user_execute
+--   restrict_handle_new_user_execute, public_rooms_host_user_id
 -- Kept here as the source-of-truth reference.
 
 -- ── Profiles ────────────────────────────────────────────────────────────────
@@ -86,6 +86,9 @@ create policy "Game results are viewable by everyone"
 create table public.public_rooms (
   id text primary key,
   host_username text not null,
+  -- The host's auth uid. Display names are non-unique, so the "one active game
+  -- per user" lookup keys on this, never on host_username.
+  host_user_id uuid references public.profiles(id) on delete set null,
   map_type text not null default 'classic',
   player_count integer default 1,
   max_players integer default 4,
@@ -98,6 +101,8 @@ create table public.public_rooms (
 
 create index public_rooms_status_last_active_idx
   on public.public_rooms (status, last_active_at desc);
+
+create index public_rooms_host_user_id_idx on public.public_rooms (host_user_id);
 
 alter table public.public_rooms enable row level security;
 

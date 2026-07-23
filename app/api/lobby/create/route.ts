@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { HOST_SUBJECT, signGameToken } from '@/lib/game-engine/auth'
 import { seedLobbyStorage } from '@/lib/game-engine/server-state'
 import type { GameRules } from '@/lib/liveblocks.config'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { getRequestUser, supabaseAdmin } from '@/lib/supabase/server'
 
 import { cleanupInactiveRooms, findActiveUserRoom } from '@/lib/game-engine/room-cleanup'
 
@@ -21,8 +21,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required lobby fields' }, { status: 400 })
     }
 
+    // Identity comes from the session cookie, never the body.
+    const user = await getRequestUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in (or play as guest) before hosting a game' }, { status: 401 })
+    }
+
     // Block creating a new room if already in an active game
-    const existingActiveRoom = await findActiveUserRoom(body.username)
+    const existingActiveRoom = await findActiveUserRoom(user.id)
     if (existingActiveRoom) {
       return NextResponse.json(
         { error: `You are already in active game '${existingActiveRoom}'. You cannot join or create multiple games simultaneously.` },
@@ -44,6 +50,7 @@ export async function POST(req: NextRequest) {
       supabaseAdmin.from('public_rooms').insert({
         id: body.roomCode,
         host_username: body.username,
+        host_user_id: user.id,
         map_type: body.mapType,
         player_count: 1,
         max_players: body.rules.maxPlayers ?? 4,

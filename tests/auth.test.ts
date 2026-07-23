@@ -1,6 +1,6 @@
 process.env.GAME_TOKEN_SECRET = 'test-secret-key'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   AuthError,
   HOST_SUBJECT,
@@ -68,5 +68,27 @@ describe('authenticateHost', () => {
     expect(() => authenticateHost('ROOM1', hostToken)).not.toThrow()
     expect(() => authenticateHost('ROOM1', signGameToken('ROOM1', 'player-0'))).toThrow(AuthError)
     expect(() => authenticateHost('ROOM1', null)).toThrow(AuthError)
+  })
+})
+
+describe('token secret configuration', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('refuses to sign in production when GAME_TOKEN_SECRET is unset', () => {
+    vi.stubEnv('GAME_TOKEN_SECRET', '')
+    vi.stubEnv('LIVEBLOCKS_SECRET_KEY', 'liveblocks-key')
+    vi.stubEnv('NODE_ENV', 'production')
+    // Falling back to the Liveblocks key in prod would couple two unrelated
+    // secrets: rotating that key would invalidate every live seat token.
+    expect(() => signGameToken('ROOM1', 'player-0')).toThrow(/GAME_TOKEN_SECRET/)
+  })
+
+  it('falls back to LIVEBLOCKS_SECRET_KEY outside production', () => {
+    vi.stubEnv('GAME_TOKEN_SECRET', '')
+    vi.stubEnv('LIVEBLOCKS_SECRET_KEY', 'liveblocks-key')
+    vi.stubEnv('NODE_ENV', 'development')
+    expect(() => signGameToken('ROOM1', 'player-0')).not.toThrow()
   })
 })

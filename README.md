@@ -81,9 +81,14 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-# Optional but recommended in production: secret for HMAC seat tokens.
-# Falls back to LIVEBLOCKS_SECRET_KEY when unset.
+# Secret for HMAC seat tokens. REQUIRED in production — the app refuses to issue
+# tokens without it. In development it falls back to LIVEBLOCKS_SECRET_KEY.
+# Generate one with: openssl rand -hex 32
 GAME_TOKEN_SECRET=a_long_random_string
+
+# Bearer secret for the scheduled room-cleanup job (/api/cron/cleanup). Optional
+# locally; on Vercel the platform sends it automatically once set.
+CRON_SECRET=
 ```
 
 ### 4. Database
@@ -120,7 +125,7 @@ npm run build      # production build
 npm run start      # serve the production build
 npm run typecheck  # tsc --noEmit (strict)
 npm run lint       # next lint
-npm run test       # vitest — 103 engine tests across 10 suites
+npm run test       # vitest — 105 engine tests across 10 suites
 ```
 
 The test suite covers the pure game engine: board, rent, cards, actions, turn resolution, scoring, bankruptcy, seat auth, server state, and room cleanup. Multiplayer flows are verified manually with two browser profiles (see `CLAUDE.md`).

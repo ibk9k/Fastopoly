@@ -7,8 +7,11 @@ import type { JsonStorage, Player } from '@/lib/liveblocks.config'
  * A token is a stateless HMAC over `roomId:subject`, where `subject` is either a
  * playerId (`player-<n>`) or the literal HOST_SUBJECT. Tokens are never stored in
  * Liveblocks storage (which is client-readable) — only a `tokenClaimed` flag is.
- * The secret falls back to LIVEBLOCKS_SECRET_KEY so no new env var is required,
- * though GAME_TOKEN_SECRET is recommended in production.
+ *
+ * GAME_TOKEN_SECRET is REQUIRED in production. Development falls back to
+ * LIVEBLOCKS_SECRET_KEY for convenience, but shipping that fallback would couple
+ * two unrelated secrets: rotating the Liveblocks key would invalidate every
+ * outstanding seat token at once and eject every player mid-game.
  */
 
 export const HOST_SUBJECT = 'host'
@@ -21,9 +24,20 @@ export class AuthError extends Error {
 }
 
 function tokenSecret(): string {
-  const secret = process.env.GAME_TOKEN_SECRET ?? process.env.LIVEBLOCKS_SECRET_KEY
-  if (!secret) throw new Error('GAME_TOKEN_SECRET (or LIVEBLOCKS_SECRET_KEY) is not configured')
-  return secret
+  const dedicated = process.env.GAME_TOKEN_SECRET
+  if (dedicated) return dedicated
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'GAME_TOKEN_SECRET is not configured. Set it to a dedicated random value ' +
+        '(e.g. `openssl rand -hex 32`) before deploying — the LIVEBLOCKS_SECRET_KEY ' +
+        'fallback is development-only.',
+    )
+  }
+
+  const fallback = process.env.LIVEBLOCKS_SECRET_KEY
+  if (!fallback) throw new Error('GAME_TOKEN_SECRET (or LIVEBLOCKS_SECRET_KEY) is not configured')
+  return fallback
 }
 
 export function signGameToken(roomId: string, subject: string): string {

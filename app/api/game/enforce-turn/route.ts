@@ -8,7 +8,8 @@ import { broadcastRoomEvent, mutateGameStorage, propertyMap } from '@/lib/game-e
 import { enforceTurnTimeout } from '@/lib/game-engine/turn'
 import { persistGameResults } from '@/lib/game-engine/persistence'
 
-const activeEnforcements = new Map<string, { deadline: number; timestamp: number }>()
+/** How long one enforcement suppresses further auto-enforcement for the same room. */
+const ENFORCEMENT_LOCK_MS = 2_500
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,22 +17,29 @@ export async function POST(req: NextRequest) {
     if (!roomId) return badRequest('Missing roomId')
     const token = readPlayerToken(req)
 
-    // Concurrency guard: if an enforcement request was processed for this room within 2.5s, skip
-    const now = Date.now()
-    const lastLock = activeEnforcements.get(roomId)
-    if (lastLock && now - lastLock.timestamp < 2500) {
-      return NextResponse.json({ acted: false, skippedConcurrent: true })
-    }
-    activeEnforcements.set(roomId, { deadline: 0, timestamp: now })
-
     let results: PlayerResult[] | null = null
     let finalPlayers: Player[] = []
     const events: RoomEvent[] = []
+
     const enforced = await mutateGameStorage(roomId, (storage) => {
       // Only seated players may nudge the timer; the server clock is the actual gate.
       authenticatePlayer(storage, roomId, playerId, token)
+
+      // Concurrency guard. The lock lives in storage rather than module memory:
+      // serverless instances share no memory, so an in-process lock would be granted
+      // once per instance and the room could be auto-rolled twice. Reading and
+      // stamping it inside mutateGameStorage's transaction makes it a real
+      // check-and-set. (The refreshed turnDeadline is a second line of defence.)
+      const now = Date.now()
+      if ((storage.enforcementLockUntil ?? 0) > now) {
+        return { acted: false, skippedConcurrent: true, skipWrite: true }
+      }
+
       const acted = enforceTurnTimeout(storage, events)
       if (!acted) return { acted: false, skipWrite: true }
+
+      storage.enforcementLockUntil = now + ENFORCEMENT_LOCK_MS
+
       if (storage.gamePhase === 'ended' && !storage.resultsPersisted) {
         storage.resultsPersisted = true
         results = calculateScores(storage.players, propertyMap(storage.properties))
@@ -39,10 +47,6 @@ export async function POST(req: NextRequest) {
       }
       return { acted: true }
     })
-
-    if (!enforced.acted) {
-      activeEnforcements.delete(roomId)
-    }
 
     if (enforced.acted) {
       await Promise.all(events.map((event) => broadcastRoomEvent(roomId, event)))
@@ -53,14 +57,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(enforced)
   } catch (error) {
-    if (req.json) {
-      try {
-        const body = (await req.json().catch(() => ({}))) as { roomId?: string }
-        if (body.roomId) activeEnforcements.delete(body.roomId)
-      } catch {
-        // ignore
-      }
-    }
     return routeError(error, 'Turn enforcement failed')
   }
 }
