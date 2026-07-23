@@ -6,7 +6,10 @@ import { supabase } from '@/lib/supabase/client'
 import PropertyStrip from '@/components/ui/PropertyStrip'
 
 type LeaderboardUser = {
+  id: string
   username: string
+  avatar_url: string | null
+  is_guest: boolean
   total_points: number
   wins: number
   games_played: number
@@ -21,8 +24,9 @@ export default function LeaderboardPage() {
     async function fetchLeaderboard() {
       setLoading(true)
       const { data, error: queryError } = await supabase
-        .from('users')
-        .select('username,total_points,wins,games_played')
+        .from('profiles')
+        .select('id,username,avatar_url,is_guest,total_points,wins,games_played')
+        .gt('games_played', 0)
         .order('total_points', { ascending: false })
         .limit(10)
 
@@ -72,9 +76,24 @@ export default function LeaderboardPage() {
                     </tr>
                   ))
                 : users.map((user, index) => (
-                    <tr key={user.username}>
+                    <tr key={user.id}>
                       <td className="px-4 py-4 font-display text-pine/70">{index + 1}</td>
-                      <td className="px-4 py-4 font-extrabold">{user.username}</td>
+                      <td className="px-4 py-4">
+                        <span className="flex items-center gap-2">
+                          {user.avatar_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={user.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                          ) : (
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-felt text-[10px] font-black text-pine">
+                              {user.username.slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
+                          <span className="font-extrabold">{user.username}</span>
+                          {user.is_guest ? (
+                            <span className="rounded-full bg-zinc-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-zinc-600">Guest</span>
+                          ) : null}
+                        </span>
+                      </td>
                       <td className="px-4 py-4 font-semibold">{user.total_points}</td>
                       <td className="px-4 py-4 font-semibold">{user.wins}</td>
                       <td className="px-4 py-4 font-semibold">{user.games_played}</td>

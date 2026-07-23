@@ -37,6 +37,9 @@ export type Player = {
   bankruptciesCaused?: number
   /** Set true once this seat's HMAC token has been claimed (claim-once). Never holds the token itself. */
   tokenClaimed?: boolean
+  /** Supabase auth uid that owns this seat — the identity stats are credited to,
+   * and what lets the same user reclaim their seat from any device. */
+  authUserId?: string
 }
 
 export type Property = {

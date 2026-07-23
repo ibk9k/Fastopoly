@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateScores } from '@/lib/game-engine/scoring'
 import type { PlayerResult } from '@/lib/game-engine/scoring'
+import type { Player } from '@/lib/liveblocks.config'
 import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase, assertIsActivePlayer } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
@@ -14,6 +15,7 @@ export async function POST(req: NextRequest) {
     const token = readPlayerToken(req)
 
     let results: PlayerResult[] | null = null
+    let finalPlayers: Player[] = []
     await mutateGameStorage(roomId, (storage) => {
       const caller = authenticatePlayer(storage, roomId, playerId, token)
       // 'playing' only: after rolling the phase is 'landed', so the landing must be
@@ -30,11 +32,12 @@ export async function POST(req: NextRequest) {
       if (storage.gamePhase === 'ended' && !storage.resultsPersisted) {
         storage.resultsPersisted = true
         results = calculateScores(storage.players, propertyMap(storage.properties))
+        finalPlayers = storage.players
       }
     })
 
     if (results) {
-      await persistGameResults(roomId, results)
+      await persistGameResults(roomId, results, finalPlayers)
     }
 
     return NextResponse.json({ success: true })

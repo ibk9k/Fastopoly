@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Lilita_One, Nunito } from 'next/font/google'
+import { AuthProvider } from '@/components/auth/AuthProvider'
 import { ToastProvider } from '@/components/ui/Toast'
 import './globals.css'
 
@@ -17,7 +18,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body className="font-sans">
-        <ToastProvider>{children}</ToastProvider>
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   )

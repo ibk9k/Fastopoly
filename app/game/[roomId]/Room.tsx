@@ -1,10 +1,11 @@
 'use client'
 
 import { LiveList } from '@liveblocks/client'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { GameRules } from '@/lib/liveblocks.config'
 import { RoomProvider } from '@/lib/liveblocks.config'
 import { useTurnSync } from '@/hooks/useTurnSync'
+import { useAuth } from '@/components/auth/AuthProvider'
 
 function TurnPresenceSync() {
   useTurnSync()
@@ -14,9 +15,12 @@ function TurnPresenceSync() {
 const DEFAULT_RULES: GameRules = { startingCash: 1500, freeParkingJackpot: false, auctionOnPass: true, speedDie: false, maxPlayers: 4 }
 
 export default function Room({ roomId, children }: { roomId: string; children: React.ReactNode }) {
+  const { user, profile, ready, signInAsGuest } = useAuth()
   const [username, setUsername] = useState<string | null>(null)
   const [needsName, setNeedsName] = useState(false)
   const [inputName, setInputName] = useState('')
+  const [joining, setJoining] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
 
   const savedRules = useMemo<GameRules>(() => {
     try {
@@ -35,23 +39,34 @@ export default function Room({ roomId, children }: { roomId: string; children: R
     } catch { return 'classic' }
   }, [])
 
+  // A seat can only be claimed by an authenticated user (guests included), so a
+  // deep link into a room must establish a session before entering.
   useEffect(() => {
-    const saved = sessionStorage.getItem('fastopoly_username')
-    if (saved) {
-      setUsername(saved)
-    } else {
-      setNeedsName(true)
+    if (!ready) return
+    if (user && profile?.username) {
+      setUsername(profile.username)
+      setNeedsName(false)
+      return
     }
-  }, [])
+    setNeedsName(true)
+  }, [ready, user, profile?.username])
 
-  function handleConfirmName() {
+  const handleConfirmName = useCallback(async () => {
     const trimmed = inputName.trim()
     if (!trimmed) return
+    setJoining(true)
+    setJoinError(null)
+    const { error } = await signInAsGuest(trimmed)
+    setJoining(false)
+    if (error) {
+      setJoinError(error)
+      return
+    }
     sessionStorage.setItem('fastopoly_username', trimmed)
     localStorage.setItem('fastopoly_username', trimmed)
     setUsername(trimmed)
     setNeedsName(false)
-  }
+  }, [inputName, signInAsGuest])
 
   if (needsName) {
     return (
@@ -63,18 +78,20 @@ export default function Room({ roomId, children }: { roomId: string; children: R
             value={inputName}
             onChange={(e) => setInputName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleConfirmName()
+              if (e.key === 'Enter') void handleConfirmName()
             }}
             className="mt-6 w-full rounded-lg border-2 border-[#2f4d20]/45 bg-[#fcfaf2] px-4 py-3 text-zinc-900 font-bold placeholder-zinc-400 outline-none focus:border-[#2f4d20]"
             placeholder="Username"
             maxLength={15}
             autoFocus
           />
+          {joinError ? <p className="mt-3 text-sm font-bold text-danger">{joinError}</p> : null}
           <button
-            onClick={handleConfirmName}
-            className="mt-4 w-full rounded-lg bg-[#2f4d20] px-4 py-3 font-black text-[#BAED91] hover:bg-[#2f4d20]/90 transition-transform active:scale-[0.98]"
+            onClick={() => void handleConfirmName()}
+            disabled={joining}
+            className="mt-4 w-full rounded-lg bg-[#2f4d20] px-4 py-3 font-black text-[#BAED91] hover:bg-[#2f4d20]/90 transition-transform active:scale-[0.98] disabled:opacity-50"
           >
-            Join Game
+            {joining ? 'Joining…' : 'Join Game'}
           </button>
         </div>
       </div>
