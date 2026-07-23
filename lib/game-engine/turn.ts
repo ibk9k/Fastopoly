@@ -173,7 +173,8 @@ export function enforceTurnTimeout(
     return false
   }
   const deadline = storage.turnDeadline ?? 0
-  if (deadline === 0 || Date.now() < deadline) return false
+  // Allow a 1000ms grace window for client/server clock skew
+  if (deadline === 0 || Date.now() + 1000 < deadline) return false
 
   const player = storage.players[storage.currentPlayerIndex]
   if (!player) return false
@@ -216,7 +217,7 @@ export function enforceTurnTimeout(
         player.cash -= 50
         leaveJailAndMove(`${player.username} (away) served their time, paid $50, and moved on.`)
       } else {
-        addLog(storage, `${player.username} (away) failed to roll doubles in jail.`)
+        addLog(storage, `${player.username} (away) failed to roll doubles in jail (${d1} and ${d2}).`)
         endTurn(storage)
       }
     }

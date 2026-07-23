@@ -12,13 +12,14 @@ type LiveblocksStorageClient = {
   getStorageDocument: (roomId: string, format: 'json') => Promise<JsonStorage | null>
   initializeStorageDocument: (roomId: string, document: unknown) => Promise<unknown>
   createRoom: (roomId: string, params: { defaultAccesses: string[] }) => Promise<unknown>
+  deleteRoom?: (roomId: string) => Promise<unknown>
   mutateStorage: (roomId: string, callback: (context: { root: StorageRoot }) => void | Promise<void>) => Promise<void>
   broadcastEvent?: (roomId: string, event: unknown) => Promise<void>
 }
 
 let liveblocksServer: LiveblocksStorageClient | null = null
 
-function getLiveblocksServer(): LiveblocksStorageClient {
+export function getLiveblocksServer(): LiveblocksStorageClient {
   const secret = process.env.LIVEBLOCKS_SECRET_KEY
   if (!secret) throw new Error('LIVEBLOCKS_SECRET_KEY is not configured')
 

@@ -19,7 +19,7 @@ import PlayerList from '@/components/lobby/PlayerList'
 import Modal from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { resolveLocalPlayer, postJson } from '@/components/game/helpers'
-import { ensurePlayerToken } from '@/lib/game-client/tokens'
+import { ensurePlayerToken, getStoredHostToken } from '@/lib/game-client/tokens'
 import { useSelf, useStorage, useOthers, useUpdateMyPresence } from '@/lib/liveblocks.config'
 import type { GameRules, Player } from '@/lib/liveblocks.config'
 import { supabase } from '@/lib/supabase/client'
@@ -51,9 +51,11 @@ export default function GameBoard() {
   const [propertiesOpen, setPropertiesOpen] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('players')
   const [isPublic, setIsPublic] = useState(true)
+  const [hostUsername, setHostUsername] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
 
   const isLobby = gamePhase === 'lobby'
+  const hasHostToken = useMemo(() => Boolean(roomId && getStoredHostToken(roomId)), [roomId])
 
   // Claim this seat's action token once the game has started and our player is resolved.
   const selfPlayerId = selfPlayer?.id
@@ -63,33 +65,68 @@ export default function GameBoard() {
     void ensurePlayerToken(roomId, selfPlayerId, selfUsername)
   }, [isLobby, selfPlayerId, selfUsername, roomId])
 
-  // Sync isPublic status from Supabase
+  // Heartbeat loop: ping room activity every 40 seconds to keep active rooms alive
   useEffect(() => {
-    async function loadRoomVisibility() {
-      if (!roomId) return
-      const { data } = await supabase.from('public_rooms').select('status').eq('id', roomId).maybeSingle()
-      if (data) setIsPublic(data.status === 'waiting')
+    if (!roomId) return
+    const pingHeartbeat = () => {
+      void postJson('/api/lobby/heartbeat', { roomCode: roomId }).catch(() => undefined)
     }
-    void loadRoomVisibility()
+    pingHeartbeat()
+    const timer = setInterval(pingHeartbeat, 40000)
+    return () => clearInterval(timer)
   }, [roomId])
 
-  // Derive lobby players from presence
+  // Sync isPublic status and host_username from Supabase
+  useEffect(() => {
+    async function loadRoomDetails() {
+      if (!roomId) return
+      const { data } = await supabase.from('public_rooms').select('status, host_username').eq('id', roomId).maybeSingle()
+      if (data) {
+        setIsPublic(data.status === 'waiting')
+        if (data.host_username) setHostUsername(data.host_username)
+      }
+    }
+    void loadRoomDetails()
+  }, [roomId])
+
+  // Derive lobby players from presence (deduplicated by username)
   const connectedPlayers = useMemo(() => {
     const everyone = [
       ...(self ? [{ connectionId: self.connectionId, presence: self.presence, isSelf: true }] : []),
       ...others.map((other) => ({ connectionId: other.connectionId, presence: other.presence, isSelf: false })),
     ].sort((first, second) => first.connectionId - second.connectionId)
 
-    return everyone.map((person, index) => ({
-      id: `player-${person.connectionId}`,
-      username: person.presence?.username ?? 'Anonymous',
-      color: seatColors[index % seatColors.length],
-      token: tokens[index % tokens.length],
-      isReady: Boolean(person.presence?.isReady),
-      isHost: index === 0,
-      isSelf: person.isSelf,
-    }))
-  }, [others, self])
+    const uniqueByUsername = new Map<string, (typeof everyone)[0]>()
+    for (const person of everyone) {
+      const uname = (person.presence?.username ?? 'Anonymous').trim()
+      const key = uname.toLowerCase()
+      const existing = uniqueByUsername.get(key)
+      if (!existing || person.isSelf || person.connectionId > existing.connectionId) {
+        uniqueByUsername.set(key, person)
+      }
+    }
+
+    const uniqueList = Array.from(uniqueByUsername.values()).sort(
+      (first, second) => first.connectionId - second.connectionId,
+    )
+
+    return uniqueList.map((person, index) => {
+      const uname = person.presence?.username ?? 'Anonymous'
+      const isCurrentHost =
+        (hostUsername && uname.toLowerCase() === hostUsername.toLowerCase()) ||
+        (person.isSelf && hasHostToken)
+
+      return {
+        id: `player-${person.connectionId}`,
+        username: uname,
+        color: seatColors[index % seatColors.length],
+        token: tokens[index % tokens.length],
+        isReady: Boolean(person.presence?.isReady),
+        isHost: Boolean(isCurrentHost),
+        isSelf: person.isSelf,
+      }
+    })
+  }, [others, self, hostUsername, hasHostToken])
 
   const isHost = connectedPlayers.some((player) => player.isHost && player.isSelf)
   const canStart = connectedPlayers.length >= 1 && connectedPlayers.every((player) => player.isReady)
@@ -167,6 +204,7 @@ export default function GameBoard() {
     canStart,
     starting,
     isHost,
+    hostUsername,
     onToggleReady: (ready: boolean) => updatePresence({ isReady: ready }),
     onStartGame: () => void startGame(),
   }

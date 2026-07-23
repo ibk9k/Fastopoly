@@ -29,6 +29,7 @@ function HomePageInner() {
   const [notice, setNotice] = useState<string | null>(null)
   const [showPlayModal, setShowPlayModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
 
   // Surface OAuth errors handed back by /auth/callback.
   useEffect(() => {
@@ -37,6 +38,26 @@ function HomePageInner() {
   }, [searchParams])
 
   const signedIn = Boolean(user)
+  const activeUsername = profile?.username ?? (signedIn ? null : name.trim() || null)
+
+  // Auto-detect if user is already in an active game and redirect directly into it
+  useEffect(() => {
+    if (!ready || !activeUsername) return
+    let isMounted = true
+    fetch(`/api/lobby/active-user-room?username=${encodeURIComponent(activeUsername)}`)
+      .then((res) => res.json())
+      .then((data: { activeRoomId?: string | null }) => {
+        if (!isMounted) return
+        if (data.activeRoomId) {
+          setActiveRoomId(data.activeRoomId)
+          router.replace(`/game/${data.activeRoomId}`)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      isMounted = false
+    }
+  }, [ready, activeUsername, router])
 
   async function handleGuest() {
     const trimmed = name.trim()
@@ -92,6 +113,11 @@ function HomePageInner() {
   }
 
   async function createRoomAndRedirect() {
+    if (activeRoomId) {
+      router.push(`/game/${activeRoomId}`)
+      return
+    }
+
     const playerName = profile?.username ?? name.trim()
     if (!playerName) {
       setError('Enter a name first')
@@ -144,6 +170,16 @@ function HomePageInner() {
         ) : signedIn ? (
           /* ── Signed in: straight to play ─────────────────────────────── */
           <div className="mt-8 w-full rounded-2xl border-2 border-salmon-line/50 bg-parchment-raised p-6 shadow-card">
+            {activeRoomId ? (
+              <div className="mb-4 rounded-xl border border-pine/30 bg-felt/40 p-3.5 text-center shadow-sm">
+                <p className="text-xs font-black uppercase tracking-wider text-pine">Game in progress</p>
+                <p className="mt-0.5 text-sm font-extrabold text-zinc-800">Room: {activeRoomId}</p>
+                <Button size="sm" className="mt-2.5 w-full" onClick={() => router.push(`/game/${activeRoomId}`)}>
+                  Rejoin Active Game
+                </Button>
+              </div>
+            ) : null}
+
             <div className="flex items-center justify-center gap-3">
               {profile?.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element

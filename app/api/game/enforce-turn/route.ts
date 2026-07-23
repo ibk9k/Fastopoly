@@ -8,11 +8,21 @@ import { broadcastRoomEvent, mutateGameStorage, propertyMap } from '@/lib/game-e
 import { enforceTurnTimeout } from '@/lib/game-engine/turn'
 import { persistGameResults } from '@/lib/game-engine/persistence'
 
+const activeEnforcements = new Map<string, { deadline: number; timestamp: number }>()
+
 export async function POST(req: NextRequest) {
   try {
     const { roomId, playerId } = (await req.json()) as { roomId?: string; playerId?: string }
     if (!roomId) return badRequest('Missing roomId')
     const token = readPlayerToken(req)
+
+    // Concurrency guard: if an enforcement request was processed for this room within 2.5s, skip
+    const now = Date.now()
+    const lastLock = activeEnforcements.get(roomId)
+    if (lastLock && now - lastLock.timestamp < 2500) {
+      return NextResponse.json({ acted: false, skippedConcurrent: true })
+    }
+    activeEnforcements.set(roomId, { deadline: 0, timestamp: now })
 
     let results: PlayerResult[] | null = null
     let finalPlayers: Player[] = []
@@ -30,6 +40,10 @@ export async function POST(req: NextRequest) {
       return { acted: true }
     })
 
+    if (!enforced.acted) {
+      activeEnforcements.delete(roomId)
+    }
+
     if (enforced.acted) {
       await Promise.all(events.map((event) => broadcastRoomEvent(roomId, event)))
     }
@@ -39,6 +53,14 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(enforced)
   } catch (error) {
+    if (req.json) {
+      try {
+        const body = (await req.json().catch(() => ({}))) as { roomId?: string }
+        if (body.roomId) activeEnforcements.delete(body.roomId)
+      } catch {
+        // ignore
+      }
+    }
     return routeError(error, 'Turn enforcement failed')
   }
 }

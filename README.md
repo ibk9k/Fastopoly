@@ -1,6 +1,6 @@
 # Fastopoly 🎲
 
-Fastopoly is a modern, real-time multiplayer Monopoly clone web application. It features a stunning responsive 3D board, interactive 3D dice rolling, and persistent multiplayer sync.
+Fastopoly is a modern, real-time multiplayer Monopoly clone. It features a responsive board with interactive 3D dice, user accounts with persistent stats, and a server-authoritative game engine that keeps play fair.
 
 Built with **Next.js**, **TypeScript**, **Liveblocks**, and **Supabase**.
 
@@ -8,76 +8,50 @@ Built with **Next.js**, **TypeScript**, **Liveblocks**, and **Supabase**.
 
 ## 🚀 Features
 
-- **Real-Time Multiplayer**: Built on Liveblocks Room and Presence APIs to synchronize board state, turn status, player movements, and interactions with millisecond latency.
-- **Interactive 3D Gameboard**: A beautifully styled responsive Board layout featuring all standard Monopoly spaces, color groups, and animations.
-- **3D Physics Dice Roller**: Fully-rendered 3D dice with randomized spins and smooth snapping transitions. Roll outcomes are persistent and synchronized globally.
-- **Robust Player Reconnection**: Automatic fallback mechanisms matching players by connection ID or active presence username to keep games going if a player refreshes or disconnects.
-- **Property & Finance Management**:
-  - Buying unowned properties, railroads, and utilities.
-  - Interactive Property Manager to build houses, hotels, mortgage/unmortgage properties, or declare bankruptcy.
-  - Automatic rent computation based on housing counts, color groups, and dice roll values.
-- **Player Trades**: Open a trade window with any active connected opponent to exchange cash and properties securely.
-- **Custom Game Rules**: Configure custom rule sets when creating a room (starting cash, free parking pool/jackpot, auction rules, speed die, etc.).
-- **Live Leaderboard & History**: Automatically persists completed game stats and placements to Supabase.
+- **Real-Time Multiplayer** — Liveblocks Storage and Presence synchronize board state, turns, and player movement with millisecond latency.
+- **Accounts & Profiles** — Play instantly as a guest, or sign in with Google or email. Every player (guests included) gets a profile with persistent stats, and a guest can upgrade to a full account later without losing history.
+- **Server-Authoritative Engine** — Clients can't mutate game state. Every action is validated server-side and authorized with an HMAC seat token bound to your account, so seats can't be stolen or impersonated.
+- **Interactive 3D Dice** — Fully rendered 3D dice with randomized spins and smooth settling. Rolls are resolved on the server; the animation is purely visual.
+- **Full Monopoly Rules** — Rent ladders and color-group doubling, houses/hotels with even-build and bank supply limits, mortgaging with 10% transfer interest, jail (including three-doubles), auctions, trades (properties, cash, and Get Out of Jail cards), and creditor-aware bankruptcy.
+- **Disconnect Resilience** — Turn timers auto-roll for absent players instead of skipping them, rooms recover from dropped clients, and rejoining restores your seat automatically from any device.
+- **Leaderboard & History** — Completed games persist per-account placements and points; profiles show aggregate stats and recent games.
+- **Accessible & Responsive** — Keyboard-operable controls, ARIA live regions for game events, reduced-motion support, and one responsive layout from mobile to desktop.
 
 ---
 
-## 🔄 Room Lifecycle & System Workflow
+## 🔄 How a Game Works
 
-Fastopoly features an automated, real-time lifecycle that manages game sessions from initial hosting to active gameplay. The process is synchronized using Supabase for persistence and Liveblocks for low-latency state updates.
+### 1. Sign in (or don't)
 
-### 1. Room Creation (Instant Hosting)
-- **Landing Page**: Hosts land on the home screen and click **PLAY**. If they don't have a username, the green username modal prompts them to enter one.
-- **Instant Hosting**: Clicking **Host a game** triggers a request to `/api/lobby/create`.
-- **Database Entry**: This endpoint inserts a new room row in the Supabase `public_rooms` table with a status of `'waiting'`.
-- **Redirect**: The client is immediately redirected to `/game/${roomId}` (where `roomId` is a unique 5-character code).
+The cover page takes a name and drops you straight into a game as a guest, or you can continue with Google or email. Guests are real (anonymous) accounts under the hood, so their stats are tracked just like everyone else's.
 
-| Landing Page | Username Modal |
-| :---: | :---: |
-| ![Landing Page](public/images/landing_page.png) | ![Username Modal](public/images/username_modal.png) |
+### 2. Hosting
 
----
+**Host a game** calls `/api/lobby/create`, which — concurrently — inserts the room into Supabase `public_rooms`, seeds the Liveblocks storage document server-side, and issues the host token. You're redirected to `/game/<5-letter-code>`.
 
-### 2. Joining a Room
-- **Join Interface**: Players can join via `/lobby/join` by inputting a 5-letter room code or browsing currently active lobbies in the **PUBLIC GAMES** list.
-- **Supabase Query**: The public games panel queries Supabase for rooms whose status is `'waiting'` and are marked public.
+### 3. Joining
 
-![Join Page](public/images/join_game.png)
+Players join at `/lobby/join` with a room code or from the **Public Games** list (polled from `/api/lobby/list`, which also sweeps out inactive rooms). Duplicate usernames in a room are rejected, and you can only be in one active game at a time — opening the app in a new tab redirects you back into your current game.
 
----
+### 4. Lobby
 
-### 3. Lobby Waiting Phase
-- **Presence Sync**: Joined players are immediately connected to the Liveblocks room. Their status (color, token, username, and "Ready" state) is synchronized in real-time.
-- **Merged Settings (Left Panel)**: The lobby host can toggle the room's public status, select the map (Classic, Mega, etc.), and adjust rules (Starting Cash, Max Players, Free Parking Jackpot, Auction rules, and Speed Die).
-- **Players Panel (Right Panel)**: Displays current players, their ready toggles, and host designation.
-- **Start Game Trigger**: The **Start Game** button is only enabled when all players are marked "READY".
+Presence syncs each player's color, name, and ready state live. The host — verified by the room's recorded host plus possession of the host token, not by join order — configures the map and rules and starts the game once everyone is ready.
 
-![Lobby Settings Page](public/images/lobby_settings.png)
+### 5. Playing
 
----
-
-### 4. Transitioning to Active Gameplay
-- **Game Initialization**: When the host clicks **Start Game**, it calls the `/api/game/init` endpoint.
-- **State Transition**:
-  - Sets the storage's `gamePhase` to `'playing'`.
-  - Populates player status, sets starting cash, and distributes starting properties.
-  - Updates the Supabase room status to `'playing'` (removing it from the public rooms browser).
-- **Layout Transition**:
-  - The left settings panel smoothly transitions its width and opacity to zero and slides out of view.
-  - The board column automatically scales and centers in the viewport.
-  - The right-side control cards (Actions, Players, Log) lock scroll position and stack vertically to provide a fixed dashboard.
-
-![Active Gameplay Page](public/images/active_gameplay.png)
+`/api/game/init` seats the players, randomizes who goes first, and flips the room to `playing`. From then on each turn is one atomic server call: `roll` moves the token **and** resolves the landing (rent, card, tax, jail) in a single transaction. A 25-second timer auto-rolls for anyone who goes idle; players who fall into debt get 80 seconds to mortgage, sell, or declare bankruptcy before it's declared for them.
 
 ---
 
 ## 🛠️ Technology Stack
 
 - **Framework**: [Next.js (App Router)](https://nextjs.org/)
-- **Programming Language**: [TypeScript](https://www.typescript.org/)
+- **Language**: [TypeScript](https://www.typescriptlang.org/) (strict)
 - **Real-time Sync**: [Liveblocks](https://liveblocks.io/)
-- **Database / Backend**: [Supabase](https://supabase.com/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) & Vanilla CSS
+- **Auth & Database**: [Supabase](https://supabase.com/)
+- **3D**: [react-three-fiber](https://docs.pmnd.rs/react-three-fiber) / three.js
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **Testing**: [Vitest](https://vitest.dev/)
 
 ---
 
@@ -85,62 +59,104 @@ Fastopoly features an automated, real-time lifecycle that manages game sessions 
 
 ### 1. Prerequisites
 
-Make sure you have Node.js installed (v18+ recommended) and a package manager like npm, yarn, or pnpm.
+Node.js v18+ and npm. You'll also need a free [Liveblocks](https://liveblocks.io/) project and a free [Supabase](https://supabase.com/) project.
 
-### 2. Install Dependencies
-
-Clone this repository and run:
+### 2. Install
 
 ```bash
 npm install
 ```
 
-### 3. Environment Configuration
+### 3. Environment
 
-Create a `.env.local` file in the root directory and configure the following environment keys:
+Create `.env.local` in the repo root:
 
 ```ini
-# Liveblocks API Keys (for real-time synchronization)
+# Liveblocks (real-time sync)
+NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=your_liveblocks_public_key
 LIVEBLOCKS_SECRET_KEY=your_liveblocks_secret_key
 
-# Supabase Configurations (for persisting game results and users)
+# Supabase (auth, rooms, leaderboard)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# Optional but recommended in production: secret for HMAC seat tokens.
+# Falls back to LIVEBLOCKS_SECRET_KEY when unset.
+GAME_TOKEN_SECRET=a_long_random_string
 ```
 
-### 4. Running the Development Server
+### 4. Database
 
-Start the local server by running:
+Apply `lib/supabase/schema.sql` to your Supabase project. It creates `profiles` (1:1 with `auth.users`, auto-populated by a signup trigger), `game_results`, and `public_rooms`, along with the row-level security policies.
+
+> **Note:** every table is RLS-enabled with public *read* policies only — all writes go through the server's service-role key. If you add a table, remember to add a read policy or the browser will silently see nothing.
+
+### 5. Auth providers (Supabase dashboard)
+
+Email/password works out of the box. For the other sign-in methods:
+
+| Provider | Setup |
+| :-- | :-- |
+| **Guest play** | Authentication → Sign In/Providers → enable **Anonymous sign-ins**. Required, or "Play as guest" fails. |
+| **Google** | Authentication → Providers → Google → enable, then paste an OAuth client ID/secret from [Google Cloud Console](https://console.cloud.google.com) (free, no billing). Set the authorized redirect URI to `https://<your-project-ref>.supabase.co/auth/v1/callback`. |
+| **Guest upgrades** | Optional — enable **Manual linking** so a guest who later signs in with Google keeps their stats instead of creating a second account. |
+
+### 6. Run
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
+
+---
+
+## 🧪 Scripts
+
+```bash
+npm run dev        # development server
+npm run build      # production build
+npm run start      # serve the production build
+npm run typecheck  # tsc --noEmit (strict)
+npm run lint       # next lint
+npm run test       # vitest — 103 engine tests across 10 suites
+```
+
+The test suite covers the pure game engine: board, rent, cards, actions, turn resolution, scoring, bankruptcy, seat auth, server state, and room cleanup. Multiplayer flows are verified manually with two browser profiles (see `CLAUDE.md`).
 
 ---
 
 ## 📂 Project Structure
 
 ```text
-├── app/                  # Next.js pages & API routes
-│   ├── api/              # Game engine state mutations & authorization routes
-│   ├── game/             # Interactive gameplay screen pages
-│   ├── lobby/            # Create and join game rooms
-│   └── page.tsx          # Main entrypoint landing page
-├── components/           # Reusable UI & Game Board components
-│   ├── game/             # DiceRoller, TradePanel, PropertyManager, Tile, etc.
-│   └── lobby/            # Room settings and player lists
-├── hooks/                # Custom React Hooks (sync, connection status)
-├── lib/                  # Shared game engines, rules, board maps, and config
-│   ├── game-engine/      # Board definitions, rules, scoring, and server state mutating logic
-│   └── liveblocks.config.ts  # Liveblocks client context & state schemas
-└── public/               # Static assets (images, logos, textures)
+├── app/
+│   ├── api/
+│   │   ├── game/         # Authoritative game mutations (roll, buy, trade, …)
+│   │   └── lobby/        # Room create/validate/list/heartbeat
+│   ├── auth/callback/    # Supabase OAuth code exchange
+│   ├── game/[roomId]/    # Room provider, game shell, board screen
+│   ├── lobby/            # Host and join screens
+│   ├── profile/          # Account stats and recent games
+│   ├── leaderboard/
+│   └── page.tsx          # Cover page with inline sign-in
+├── components/
+│   ├── auth/             # AuthProvider (session + profile)
+│   ├── game/             # Board, dice, panels, overlays
+│   ├── lobby/            # Lobby settings and player list
+│   └── ui/               # Button, Modal, Toast primitives
+├── hooks/                # useGameActions, useCountdown, presence/connection hooks
+├── lib/
+│   ├── game-engine/      # Board, rules, turn engine, auth, persistence, cleanup
+│   ├── supabase/         # Browser/server clients + schema.sql
+│   └── liveblocks.config.ts
+├── tests/                # Vitest engine suites
+├── middleware.ts         # Refreshes the Supabase session cookie
+└── public/               # Static assets
 ```
 
 ---
 
 ## 📄 License
 
-This project is open-source software licensed under the [MIT License](LICENSE).
+Open-source under the [MIT License](LICENSE).

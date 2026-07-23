@@ -1,6 +1,7 @@
 'use client'
 
 import Button from '@/components/ui/Button'
+import { truncateUsername } from '@/components/game/helpers'
 
 export type LobbyPlayer = {
   id: string
@@ -16,12 +17,13 @@ type PlayerListProps = {
   canStart: boolean
   starting: boolean
   isHost: boolean
+  hostUsername?: string | null
   onToggleReady: (ready: boolean) => void
   onStartGame: () => void
 }
 
 /** The lobby players card — one implementation for every viewport. */
-export default function PlayerList({ players, canStart, starting, isHost, onToggleReady, onStartGame }: PlayerListProps) {
+export default function PlayerList({ players, canStart, starting, isHost, hostUsername, onToggleReady, onStartGame }: PlayerListProps) {
   return (
     <div className="flex flex-col justify-between rounded-lg border border-salmon-line/60 bg-salmon p-5 text-zinc-900 shadow-card">
       <div>
@@ -36,18 +38,30 @@ export default function PlayerList({ players, canStart, starting, isHost, onTogg
               key={player.id}
               className="flex items-center justify-between gap-3 rounded-lg border border-salmon-line/40 bg-white/25 px-3.5 py-2.5 shadow-sm"
             >
-              <div className="flex items-center gap-3">
-                <span aria-hidden className="h-3 w-3 rounded-full border border-black/10" style={{ background: player.color }} />
-                <p className="flex items-center gap-1.5 text-sm font-extrabold leading-none text-zinc-900">
-                  {player.username}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 shrink-0 rounded-full border border-black/10"
+                  style={{ background: player.color }}
+                />
+                <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                  <span title={player.username} className="text-sm font-extrabold leading-snug text-zinc-900 break-words">
+                    {truncateUsername(player.username, 10)}
+                  </span>
                   {player.isHost ? (
-                    <span className="rounded bg-pine px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-felt">Host</span>
+                    <span className="inline-flex items-center rounded bg-pine px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-felt shrink-0">
+                      Host
+                    </span>
                   ) : null}
-                  {player.isSelf ? <span className="text-[9px] font-bold uppercase text-zinc-600">(you)</span> : null}
-                </p>
+                  {player.isSelf ? (
+                    <span className="inline-flex items-center text-[9px] font-bold uppercase text-zinc-600 shrink-0">
+                      (you)
+                    </span>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[10px] font-extrabold uppercase ${player.isReady ? 'text-success' : 'text-danger'}`}>
                   {player.isReady ? '✓ Ready' : 'Not Ready'}
                 </span>
@@ -76,7 +90,7 @@ export default function PlayerList({ players, canStart, starting, isHost, onTogg
           </>
         ) : (
           <div className="rounded-lg border border-salmon-line/30 bg-white/25 p-3.5 text-center text-xs font-extrabold text-zinc-800">
-            Waiting for the host to start the game…
+            Waiting for {hostUsername ? <span className="font-black text-pine">{truncateUsername(hostUsername, 10)}</span> : 'the host'} to start the game…
           </div>
         )}
       </div>

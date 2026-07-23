@@ -4,6 +4,8 @@ import { seedLobbyStorage } from '@/lib/game-engine/server-state'
 import type { GameRules } from '@/lib/liveblocks.config'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
+import { cleanupInactiveRooms, findActiveUserRoom } from '@/lib/game-engine/room-cleanup'
+
 type CreateLobbyBody = {
   roomCode?: string
   username?: string
@@ -19,6 +21,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required lobby fields' }, { status: 400 })
     }
 
+    // Block creating a new room if already in an active game
+    const existingActiveRoom = await findActiveUserRoom(body.username)
+    if (existingActiveRoom) {
+      return NextResponse.json(
+        { error: `You are already in active game '${existingActiveRoom}'. You cannot join or create multiple games simultaneously.` },
+        { status: 400 },
+      )
+    }
+
     const rules: GameRules = {
       startingCash: body.rules?.startingCash ?? 1500,
       freeParkingJackpot: body.rules?.freeParkingJackpot ?? false,
@@ -27,11 +38,8 @@ export async function POST(req: NextRequest) {
       maxPlayers: body.rules?.maxPlayers ?? 4,
     }
 
-    // The Supabase row, the Liveblocks storage seed, and the opportunistic stale-room
-    // cleanup are all independent — run them concurrently so create isn't the sum of
-    // three round-trips. Seeding (two Liveblocks calls) is the long pole; the client
-    // needs the seed before it can read the room, so we still wait for it.
-    const staleCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+    // The Supabase row, the Liveblocks storage seed, and the opportunistic 5-minute
+    // inactive room cleanup run concurrently.
     const [{ error }] = await Promise.all([
       supabaseAdmin.from('public_rooms').insert({
         id: body.roomCode,
@@ -41,14 +49,10 @@ export async function POST(req: NextRequest) {
         max_players: body.rules.maxPlayers ?? 4,
         rules: body.rules,
         status: body.isPublic ? 'waiting' : 'private',
+        last_active_at: new Date().toISOString(),
       }),
       seedLobbyStorage(body.roomCode, rules, body.mapType),
-      supabaseAdmin
-        .from('public_rooms')
-        .delete()
-        .eq('status', 'waiting')
-        .lt('last_active_at', staleCutoff)
-        .then(() => undefined, () => undefined), // best-effort, never blocks the create
+      cleanupInactiveRooms().then(() => undefined, () => undefined),
     ])
 
     if (error) {

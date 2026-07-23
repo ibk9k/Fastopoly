@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import { getStoredUsername } from '@/lib/game-client/tokens'
 import { supabase } from '@/lib/supabase/client'
 
 type PublicRoom = {
@@ -18,23 +19,45 @@ export default function JoinLobbyPage() {
   const [rooms, setRooms] = useState<PublicRoom[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loadingRooms, setLoadingRooms] = useState(true)
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
+
+  // Auto-detect if user has an active room in progress and redirect directly
+  useEffect(() => {
+    const currentUsername = getStoredUsername()
+    if (!currentUsername) return
+    let isMounted = true
+    fetch(`/api/lobby/active-user-room?username=${encodeURIComponent(currentUsername)}`)
+      .then((res) => res.json())
+      .then((data: { activeRoomId?: string | null }) => {
+        if (!isMounted) return
+        if (data.activeRoomId) {
+          setActiveRoomId(data.activeRoomId)
+          router.replace(`/game/${data.activeRoomId}`)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      isMounted = false
+    }
+  }, [router])
 
   const fetchRooms = useCallback(async () => {
-    // Hide rooms that have sat in the waiting list without activity for hours.
-    const staleCutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
-    const { data } = await supabase
-      .from('public_rooms')
-      .select('id,host_username,map_type,player_count,max_players')
-      .eq('status', 'waiting')
-      .gte('last_active_at', staleCutoff)
-      .order('last_active_at', { ascending: false })
-    setRooms(data ?? [])
-    setLoadingRooms(false)
+    try {
+      const response = await fetch('/api/lobby/list')
+      if (response.ok) {
+        const data = (await response.json()) as { rooms?: PublicRoom[] }
+        setRooms(data.rooms ?? [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch rooms', err)
+    } finally {
+      setLoadingRooms(false)
+    }
   }, [])
 
   useEffect(() => {
     void fetchRooms()
-    const interval = window.setInterval(() => void fetchRooms(), 5000)
+    const interval = window.setInterval(() => void fetchRooms(), 12000)
     return () => window.clearInterval(interval)
   }, [fetchRooms])
 
@@ -45,10 +68,11 @@ export default function JoinLobbyPage() {
       return
     }
 
+    const currentUsername = getStoredUsername()
     const response = await fetch('/api/lobby/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomCode: normalized }),
+      body: JSON.stringify({ roomCode: normalized, username: currentUsername }),
     })
     const result = (await response.json()) as { valid?: boolean; error?: string }
     if (!response.ok || !result.valid) {

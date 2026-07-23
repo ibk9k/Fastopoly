@@ -23,6 +23,14 @@ export function formatMoney(value: number): string {
   return `$${Math.round(value).toLocaleString()}`
 }
 
+export function truncateUsername(name: string | undefined | null, maxLength: number = 10): string {
+  if (!name) return ''
+  if (name.length > maxLength) {
+    return `${name.slice(0, maxLength)}...`
+  }
+  return name
+}
+
 export function playerIdFromConnection(connectionId: number | undefined): string {
   return typeof connectionId === 'number' ? `player-${connectionId}` : ''
 }
