@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
 
@@ -39,22 +39,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [ready, setReady] = useState(false)
 
+  // Guards against an in-flight retry loop for a previous user overwriting a newer one.
+  const loadRequestRef = useRef(0)
+
   const loadProfile = useCallback(async (userId: string | undefined) => {
+    const requestId = ++loadRequestRef.current
     if (!userId) {
       setProfile(null)
       return
     }
-    const { data } = await supabase
-      .from('profiles')
-      .select('id,username,avatar_url,is_guest,total_points,games_played,wins')
-      .eq('id', userId)
-      .maybeSingle()
-    setProfile((data as Profile) ?? null)
-    // Keep the legacy key in sync so presence//game code keeps working unchanged.
-    if (data?.username && typeof window !== 'undefined') {
-      window.localStorage.setItem(USERNAME_KEY, data.username)
-      window.sessionStorage.setItem(USERNAME_KEY, data.username)
+
+    // On a brand-new signup the profile row is created by the on_auth_user_created
+    // trigger, which can land a beat after the session does. Without a retry the
+    // very first render of a new guest showed "Player / Signed in" until reload.
+    const delaysMs = [0, 150, 300, 600, 1200]
+    for (const delay of delaysMs) {
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
+      if (loadRequestRef.current !== requestId) return
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('id,username,avatar_url,is_guest,total_points,games_played,wins')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (loadRequestRef.current !== requestId) return
+      if (data) {
+        setProfile(data as Profile)
+        // Keep the legacy key in sync so presence//game code keeps working unchanged.
+        if (data.username && typeof window !== 'undefined') {
+          window.localStorage.setItem(USERNAME_KEY, data.username)
+          window.sessionStorage.setItem(USERNAME_KEY, data.username)
+        }
+        return
+      }
     }
+
+    setProfile(null)
   }, [])
 
   useEffect(() => {
