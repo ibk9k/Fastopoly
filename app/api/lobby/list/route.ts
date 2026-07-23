@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { cleanupInactiveRooms, INACTIVITY_THRESHOLD_MS } from '@/lib/game-engine/room-cleanup'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
+/**
+ * This handler takes no request input, so Next would otherwise statically
+ * prerender it at build time and serve a frozen room list forever in production.
+ */
+export const dynamic = 'force-dynamic'
+
 let lastCleanupTime = 0
 const CLEANUP_THROTTLE_MS = 30_000
 

@@ -18,7 +18,7 @@ npm run build      # next build
 npm run start      # next start (prod)
 npm run typecheck  # tsc --noEmit  (strict)
 npm run lint       # next lint
-npm run test       # vitest run — 103 engine tests across 10 suites
+npm run test       # vitest run — 105 engine tests across 10 suites
 ```
 
 Node 18+. Needs `.env.local` (below); the app throws without `LIVEBLOCKS_SECRET_KEY`, and auth/lobby/leaderboard fail without the Supabase keys.
@@ -31,8 +31,10 @@ LIVEBLOCKS_SECRET_KEY=               # server (Liveblocks Node SDK + auth route)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=       # browser reads (public_rooms, profiles, game_results)
 SUPABASE_SERVICE_ROLE_KEY=           # server writes (bypasses RLS)
-# GAME_TOKEN_SECRET=                 # optional; HMAC seat-token secret.
-                                     # Falls back to LIVEBLOCKS_SECRET_KEY. SET THIS IN PRODUCTION.
+GAME_TOKEN_SECRET=                   # HMAC seat-token secret. REQUIRED in production
+                                     # (throws without it); falls back to
+                                     # LIVEBLOCKS_SECRET_KEY in dev only.
+CRON_SECRET=                         # bearer secret for /api/cron/cleanup
 ```
 
 `.env.local` is gitignored. Only `.env.example` is tracked.
@@ -135,14 +137,19 @@ Server authority is enforced end-to-end. Clients can neither impersonate via the
 - **Cleanup:** `cleanupInactiveRooms()` deletes rooms idle > 5 min from Supabase **and** deletes their Liveblocks documents (`server.deleteRoom`). Swept opportunistically by `GET /api/lobby/list` (throttled to one sweep per 30 s) — there is no cron.
 - **Public list:** `/lobby/join` polls `/api/lobby/list` every 12 s.
 - **Turn timers:** 25 s to act; on expiry `enforce-turn` **auto-rolls** for the absent player (resolving the landing and passing any buy) rather than skipping. Rolling and property management refresh the deadline. A player in debt gets **80 s** before auto-bankruptcy, surfaced by the center-screen `DebtOverlay`.
-- **Auto-roll is single-writer:** `TurnTimer` elects one client per room (active player if present, else lowest `connectionId`) and enforces a given deadline once with a 3.5 s cooldown; `enforce-turn` additionally holds a 2.5 s in-memory lock per room. Both guards exist because every client firing at once produced *two different rolls* in the log.
-- **One active game per user:** `findActiveUserRoom` blocks creating/joining a second room and auto-redirects new tabs into the existing game.
+- **Auto-roll is single-writer:** `TurnTimer` elects one client per room (active player if present, else lowest `connectionId`) and enforces a given deadline once with a 3.5 s cooldown; `enforce-turn` additionally check-and-sets `storage.enforcementLockUntil` (2.5 s) **inside the mutation transaction**, so the lock holds across serverless instances. Both guards exist because every client firing at once produced *two different rolls* in the log.
+- **One active game per user:** `findActiveUserRoom` blocks creating/joining a second room and auto-redirects new tabs into the existing game. It matches on the **auth uid** — `public_rooms.host_user_id` for the host, `player.authUserId` for seated players.
+
+## Deployment
+
+- **Host:** Vercel. Every `app/api/*` route must stay on the **Node** runtime (`node:crypto` HMAC + Liveblocks Node SDK) — never add `runtime = 'edge'`.
+- **`GAME_TOKEN_SECRET` is required in production.** `tokenSecret()` throws rather than falling back to `LIVEBLOCKS_SECRET_KEY`, because that coupling would let a Liveblocks key rotation invalidate every live seat token at once.
+- **GET route handlers with no request input get statically prerendered** and will serve frozen data forever. `/api/lobby/list` and `/api/lobby/active-user-room` both declare `export const dynamic = 'force-dynamic'`. Check the build output for `○ (Static)` on anything under `/api`.
+- **Room cleanup** runs two ways: opportunistically from `/api/lobby/list` (throttled 30 s, module-level so it's per-instance) and on a schedule via `/api/cron/cleanup`, gated by `CRON_SECRET` and declared in `vercel.json`. The cron is daily because Hobby-tier frequency is limited; the opportunistic sweep is what actually enforces the 5-minute threshold.
 
 ## Known pitfalls
 
 **Current, still open:**
-- `findActiveUserRoom` matches by **lowercased username**, not auth uid. Since display names aren't unique, two players sharing a name can block each other's lobby access. Fixing it means matching `player.authUserId`.
-- `enforce-turn`'s concurrency lock is **in-memory**, so it's per-server-instance. It won't hold across multiple serverless instances; the client-side single-writer election is the real guard.
 - Guest→Google upgrade silently creates a *separate* account unless Manual linking is enabled in Supabase.
 - `GamePhase` still declares `rolling`, which nothing sets.
 - Dead flags: `speedDie` (rule stored, no logic — UI toggle removed).
@@ -159,10 +166,13 @@ Server authority is enforced end-to-end. Clients can neither impersonate via the
 - Host assignment by lobby index (`index === 0`), which let a newcomer in an emptied room appear as host and fail `init`.
 - `TurnTimer` re-firing `enforce-turn` 10–50×/s and freezing at 0:00.
 - Alt-Tab remounting `RoomProvider` and flashing the loading spinner (`hasValidatedRef` validates once per session).
+- Username-keyed `findActiveUserRoom` (two players named "Alex" locked each other out); `/api/lobby/active-user-room?username=` letting anyone probe whether a name was in a game — identity now comes from the session cookie.
+- `/api/lobby/list` statically prerendered at build time, freezing the public games list in production.
+- The duplicate-username check in `/api/lobby/validate` was dead code: it recomputed the same predicate it was guarded by, so it never fired.
 
 ## Verification
 
-**Engine changes:** `npm run test` (vitest, 103 tests / 10 suites) + `npm run typecheck`.
+**Engine changes:** `npm run test` (vitest, 105 tests / 10 suites) + `npm run typecheck`.
 
 **Multiplayer changes — canonical two-tab test** (two browser profiles; identity is per-cookie):
 

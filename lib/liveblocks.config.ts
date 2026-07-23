@@ -132,6 +132,10 @@ export type Storage = {
   consecutiveDoubles?: number
   /** Epoch ms by which the current player must act, or their turn is auto-skipped. */
   turnDeadline?: number
+  /** Epoch ms until which auto-enforcement of the turn timer is locked out.
+   * Stamped inside the same transaction as the enforcement itself, so the guard
+   * survives across serverless instances (an in-process lock would not). */
+  enforcementLockUntil?: number
   /** Set once final scores have been written to Supabase, so persistence is idempotent. */
   resultsPersisted?: boolean
   auctionPropertyId?: string | null

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanupInactiveRooms, findActiveUserRoom, INACTIVITY_THRESHOLD_MS, touchRoomActivity } from '@/lib/game-engine/room-cleanup'
 import { readGameStorage } from '@/lib/game-engine/server-state'
-import { supabaseAdmin } from '@/lib/supabase/server'
+import { getRequestUser, supabaseAdmin } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,28 +34,43 @@ export async function POST(req: NextRequest) {
 
     if (username) {
       const normalized = username.trim().toLowerCase()
-      const isAlreadySeated = Boolean(
-        storage &&
-          storage.players &&
-          storage.players.some((p) => p.username.trim().toLowerCase() === normalized),
+      const players = storage?.players ?? []
+      const user = await getRequestUser()
+      const myUid = user?.id
+
+      // The caller's existing seat, if any. Identity is the auth uid; a same-named
+      // seat that hasn't been claimed yet also counts, so a player who reloads
+      // between `init` and their first action can still get back in. claim-token
+      // remains the actual security boundary — this check is only UX.
+      const mySeat = players.find(
+        (p) =>
+          (myUid && p.authUserId === myUid) ||
+          (!p.authUserId && p.username.trim().toLowerCase() === normalized),
       )
+      const isAlreadySeated = Boolean(mySeat)
 
       if (data.status === 'playing' && !isAlreadySeated) {
         return NextResponse.json({ valid: false, error: 'This game has already started' }, { status: 400 })
       }
 
-      // Prevent joining a second game if user is already in another active game
-      const existingActiveRoom = await findActiveUserRoom(username, roomCode)
-      if (existingActiveRoom && !isAlreadySeated) {
-        return NextResponse.json(
-          { valid: false, error: `You are already in active game '${existingActiveRoom}'. You cannot join multiple games simultaneously.` },
-          { status: 400 },
-        )
+      // Prevent joining a second game if the user is already in another active game.
+      if (myUid && !isAlreadySeated) {
+        const existingActiveRoom = await findActiveUserRoom(myUid, roomCode)
+        if (existingActiveRoom) {
+          return NextResponse.json(
+            { valid: false, error: `You are already in active game '${existingActiveRoom}'. You cannot join multiple games simultaneously.` },
+            { status: 400 },
+          )
+        }
       }
 
-      if (data.status === 'waiting' && !isAlreadySeated && storage && storage.players) {
-        const isDuplicate = storage.players.some((p) => p.username.trim().toLowerCase() === normalized)
-        if (isDuplicate) {
+      // Two players in one room may not share a display name — the board and log
+      // would be unreadable. Compares against every seat that isn't the caller's.
+      if (data.status === 'waiting' && !isAlreadySeated) {
+        const nameTakenByOther = players.some(
+          (p) => p !== mySeat && p.username.trim().toLowerCase() === normalized,
+        )
+        if (nameTakenByOther) {
           return NextResponse.json(
             { valid: false, error: `The username '${username}' is already taken in this room.` },
             { status: 400 },
