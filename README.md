@@ -72,8 +72,8 @@ npm install
 Create `.env.local` in the repo root:
 
 ```ini
-# Liveblocks (real-time sync)
-NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=your_liveblocks_public_key
+# Liveblocks (real-time sync). Server-side only — the browser authenticates
+# through /api/liveblocks-auth and never holds a Liveblocks key.
 LIVEBLOCKS_SECRET_KEY=your_liveblocks_secret_key
 
 # Supabase (auth, rooms, leaderboard)
@@ -125,7 +125,7 @@ npm run build      # production build
 npm run start      # serve the production build
 npm run typecheck  # tsc --noEmit (strict)
 npm run lint       # next lint
-npm run test       # vitest — 105 engine tests across 10 suites
+npm run test       # vitest — 110 engine tests across 11 suites
 ```
 
 The test suite covers the pure game engine: board, rent, cards, actions, turn resolution, scoring, bankruptcy, seat auth, server state, and room cleanup. Multiplayer flows are verified manually with two browser profiles (see `CLAUDE.md`).

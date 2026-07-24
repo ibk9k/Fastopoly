@@ -18,7 +18,7 @@ npm run build      # next build
 npm run start      # next start (prod)
 npm run typecheck  # tsc --noEmit  (strict)
 npm run lint       # next lint
-npm run test       # vitest run — 105 engine tests across 10 suites
+npm run test       # vitest run — 110 engine tests across 11 suites
 ```
 
 Node 18+. Needs `.env.local` (below); the app throws without `LIVEBLOCKS_SECRET_KEY`, and auth/lobby/leaderboard fail without the Supabase keys.
@@ -26,8 +26,9 @@ Node 18+. Needs `.env.local` (below); the app throws without `LIVEBLOCKS_SECRET_
 ## Environment variables
 
 ```ini
-NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=   # client
-LIVEBLOCKS_SECRET_KEY=               # server (Liveblocks Node SDK + auth route)
+LIVEBLOCKS_SECRET_KEY=               # server only (Node SDK + auth route). There is
+                                     # NO public Liveblocks key: the browser calls
+                                     # /api/liveblocks-auth, which is session-gated.
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=       # browser reads (public_rooms, profiles, game_results)
 SUPABASE_SERVICE_ROLE_KEY=           # server writes (bypasses RLS)
@@ -127,7 +128,7 @@ Server authority is enforced end-to-end. Clients can neither impersonate via the
 
 - **Seat tokens (`lib/game-engine/auth.ts`):** every `app/api/game/*` route requires an `x-player-token` header. A token is `HMAC-SHA256(secret, "<roomId>:<subject>")`, subject = playerId or the literal `"host"`. `authenticatePlayer(...)` verifies the caller holds the token for the playerId they claim and returns that seated player — routes derive identity from it, **never** from a body field. `authenticateHost` gates `init`/`end`/`lobby-settings`/`release-seat`.
 - **Token issuance:** `POST /api/game/claim-token` binds the seat to the caller's **authenticated Supabase uid read from the session cookie** — not the username. Re-claiming your own seat is idempotent (that's how recovery works); another account gets 403 even if it spoofs your username. The token is returned to the client and stored in `localStorage` (`lib/game-client/tokens.ts`), never written to Storage. The host token comes from `POST /api/lobby/create`. `postJson` (in `helpers.ts`) auto-attaches the right token and lazily claims when missing.
-- **Liveblocks access = `READ_ACCESS`** (`app/api/liveblocks-auth/route.ts`): the issued token grants `["room:read", "room:presence:write"]` only — **direct Storage writes are rejected by the Liveblocks server**. Load-bearing consequences: (1) storage is server-seeded at creation (`seedLobbyStorage`); (2) lobby settings go through `POST /api/game/lobby-settings` (host-only), not client `useMutation`; (3) ready/turn/username are **presence**, which stays client-writable.
+- **Liveblocks access = `READ_ACCESS`, and the endpoint is session-gated** (`app/api/liveblocks-auth/route.ts`): the caller must hold a Supabase session, and the Liveblocks user id is derived from their auth uid — never from a body field. The issued token grants `["room:read", "room:presence:write"]` only — **direct Storage writes are rejected by the Liveblocks server**. Load-bearing consequences: (1) storage is server-seeded at creation (`seedLobbyStorage`); (2) lobby settings go through `POST /api/game/lobby-settings` (host-only), not client `useMutation`; (3) ready/turn/username are **presence**, which stays client-writable.
 - **Supabase RLS:** every table is RLS-enabled with **public SELECT policies only**. All writes use the service-role key server-side. If you add a table, add a read policy or the browser silently sees nothing (this exact mistake once left the lobby list and leaderboard permanently empty).
 - **All mutations are atomic:** `mutateGameStorage` wraps read-mutate-write in one Liveblocks transaction; concurrent requests serialize.
 
@@ -172,7 +173,7 @@ Server authority is enforced end-to-end. Clients can neither impersonate via the
 
 ## Verification
 
-**Engine changes:** `npm run test` (vitest, 105 tests / 10 suites) + `npm run typecheck`.
+**Engine changes:** `npm run test` (vitest, 110 tests / 11 suites) + `npm run typecheck`.
 
 **Multiplayer changes — canonical two-tab test** (two browser profiles; identity is per-cookie):
 

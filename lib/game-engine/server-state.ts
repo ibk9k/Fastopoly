@@ -2,6 +2,7 @@ import { Liveblocks } from '@liveblocks/node'
 import { nanoid } from 'nanoid'
 import type { GameLogEntry, GameRules, JsonStorage, Player, Property } from '@/lib/liveblocks.config'
 import { PROPERTY_IDS } from './board'
+import { DEBT_TIMEOUT_MS, TURN_TIMEOUT_MS } from './timing'
 
 type StorageRoot = {
   set: (key: keyof JsonStorage | string, value: unknown) => void
@@ -207,11 +208,9 @@ export function propertyMap(properties: Record<string, Property>): Map<string, P
   return new Map(Object.entries(properties))
 }
 
-/** How long the current player has to roll/act before any peer auto-plays for them. */
-export const TURN_TIMEOUT_MS = 25_000
-/** A player who has gone into debt gets a longer window (1 min 20 s) to raise funds
- * or declare bankruptcy before they are auto-bankrupted. */
-export const DEBT_TIMEOUT_MS = 80_000
+// Canonical values live in ./timing — re-exported here so existing importers
+// (routes, tests) keep working without every call site learning a new path.
+export { DEBT_TIMEOUT_MS, TURN_TIMEOUT_MS } from './timing'
 
 export function refreshTurnDeadline(storage: JsonStorage): void {
   const active = storage.players[storage.currentPlayerIndex]

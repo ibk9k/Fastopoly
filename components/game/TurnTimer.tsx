@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSelf, useOthers, useStorage } from '@/lib/liveblocks.config'
 import { postJson } from '@/components/game/helpers'
+import { serverNow, syncServerTime } from '@/lib/game-client/server-time'
+import { URGENT_THRESHOLD_SECONDS } from '@/lib/game-engine/timing'
 
 type TurnTimerProps = {
   roomId: string
@@ -26,12 +28,15 @@ export default function TurnTimer({ roomId, selfPlayerId, isActivePlayer }: Turn
   const turnDeadline = useStorage((root) => root.turnDeadline) ?? 0
   const self = useSelf()
   const others = useOthers()
-  const [now, setNow] = useState(() => Date.now())
+  const [now, setNow] = useState(() => serverNow())
   const lastEnforcedDeadlineRef = useRef<number>(0)
   const lastEnforceTimeRef = useRef<number>(0)
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000)
+    // turnDeadline is stamped on the server clock; measuring it against a skewed
+    // local clock would either stall enforcement forever or fire it immediately.
+    void syncServerTime().then(() => setNow(serverNow()))
+    const interval = setInterval(() => setNow(serverNow()), 1000)
     return () => clearInterval(interval)
   }, [])
 
@@ -54,7 +59,7 @@ export default function TurnTimer({ roomId, selfPlayerId, isActivePlayer }: Turn
     if (!runnablePhase || !selfPlayerId || turnDeadline === 0 || !isDesignatedEnforcer) return
     if (remainingMs > -GRACE_MS) return
 
-    const nowTime = Date.now()
+    const nowTime = serverNow()
     // Prevent request spamming: enforce once per turnDeadline timestamp, with a 3.5s retry cooldown
     if (
       lastEnforcedDeadlineRef.current === turnDeadline &&
@@ -72,7 +77,7 @@ export default function TurnTimer({ roomId, selfPlayerId, isActivePlayer }: Turn
   if (!runnablePhase || turnDeadline === 0) return null
 
   const seconds = Math.max(0, Math.ceil(remainingMs / 1000))
-  const urgent = seconds <= 8
+  const urgent = seconds <= URGENT_THRESHOLD_SECONDS
   const label = isActivePlayer ? 'Your turn' : 'Turn'
 
   return (

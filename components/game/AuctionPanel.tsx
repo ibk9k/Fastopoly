@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { getTile } from '@/lib/game-engine/board'
 import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import { colorForGroup, formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
+import { serverNow, syncServerTime } from '@/lib/game-client/server-time'
+import { AUCTION_DURATION_MS, AUCTION_EXTENSION_MS } from '@/lib/game-engine/timing'
 
 type AuctionPanelProps = {
   roomId: string
@@ -36,13 +38,15 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [currentTime, setCurrentTime] = useState(Date.now())
+  const [currentTime, setCurrentTime] = useState(() => serverNow())
   const [resolving, setResolving] = useState(false)
 
-  // Update timer every 250ms
+  // Update timer every 250ms, measured against the server clock (auctionEndTime is
+  // stamped server-side, so a skewed device clock would misreport the countdown).
   useEffect(() => {
+    void syncServerTime().then(() => setCurrentTime(serverNow()))
     const interval = setInterval(() => {
-      setCurrentTime(Date.now())
+      setCurrentTime(serverNow())
     }, 250)
     return () => clearInterval(interval)
   }, [])
@@ -219,7 +223,7 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
   }
 
   // Calculate timer percent for visual progress bar
-  const maxTime = 30
+  const maxTime = AUCTION_DURATION_MS / 1000
   const timePercent = Math.min(100, (timeRemaining / maxTime) * 100)
   const isTimeCritical = timeRemaining <= 10
 
@@ -342,7 +346,8 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
           </div>
         ) : (
           <div className="mt-4 text-center text-[10px] text-zinc-500 font-semibold leading-tight">
-            ⚠️ Bidding in the last 10 seconds extends the timer back to 10 seconds to allow counters.
+            ⚠️ Bidding in the last {AUCTION_EXTENSION_MS / 1000} seconds resets the timer to{' '}
+            {AUCTION_EXTENSION_MS / 1000} seconds to allow counters.
           </div>
         )}
       </section>

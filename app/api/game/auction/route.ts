@@ -4,6 +4,7 @@ import { authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { assertGamePhase } from '@/lib/game-engine/guards'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, mutateGameStorage } from '@/lib/game-engine/server-state'
+import { AUCTION_EXTENSION_MS } from '@/lib/game-engine/timing'
 
 export async function POST(req: NextRequest) {
   try {
@@ -57,10 +58,11 @@ export async function POST(req: NextRequest) {
       const existingBids = storage.auctionBids ?? []
       storage.auctionBids = [...existingBids, { playerId, amount: newBid, timestamp: now }]
 
-      // Anti-sniping protection: if less than 10 seconds are left, extend the timer
+      // Anti-sniping protection: a late bid pushes the deadline back out so there
+      // is always room for a counter-bid.
       const timeRemaining = endTime - now
-      if (timeRemaining < 10000) {
-        storage.auctionEndTime = now + 10000
+      if (timeRemaining < AUCTION_EXTENSION_MS) {
+        storage.auctionEndTime = now + AUCTION_EXTENSION_MS
       }
 
       addLog(storage, `${bidder.username} bid $${newBid} on ${tile.name}.`)

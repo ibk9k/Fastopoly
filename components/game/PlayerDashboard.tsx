@@ -6,6 +6,7 @@ import PropertyDetailModal from '@/components/game/PropertyDetailModal'
 import { calculatePlayerNetWorth, colorForGroup, formatMoney, playerIdFromConnection, resolveLocalPlayer, truncateUsername } from '@/components/game/helpers'
 import { getTile } from '@/lib/game-engine/board'
 import { useCountdown } from '@/hooks/useCountdown'
+import { URGENT_THRESHOLD_SECONDS } from '@/lib/game-engine/timing'
 import { useOthers, useSelf, useStorage } from '@/lib/liveblocks.config'
 
 function formatClock(seconds: number): string {
@@ -109,7 +110,7 @@ export default function PlayerDashboard({ roomId }: PlayerDashboardProps) {
                       {isActive && !player.isBankrupt && secondsLeft !== null ? (
                         <p
                           className={`mt-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide ${
-                            player.cash < 0 || secondsLeft <= 8 ? 'text-danger' : 'text-pine/70'
+                            player.cash < 0 || secondsLeft <= URGENT_THRESHOLD_SECONDS ? 'text-danger' : 'text-pine/70'
                           }`}
                         >
                           <span aria-hidden>⏱</span>

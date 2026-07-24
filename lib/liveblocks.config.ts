@@ -4,17 +4,13 @@ import { createClient, LiveList, LiveMap } from '@liveblocks/client'
 import { createRoomContext } from '@liveblocks/react'
 
 const client = createClient({
+  // The endpoint derives identity from the session cookie; sending a username here
+  // would be decorative at best and spoofable at worst.
   authEndpoint: async (room) => {
-    const username =
-      typeof window === 'undefined'
-        ? 'anonymous'
-        : sessionStorage.getItem('fastopoly_username') ??
-          localStorage.getItem('fastopoly_username') ??
-          'anonymous'
     const response = await fetch('/api/liveblocks-auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room, username }),
+      body: JSON.stringify({ room }),
     })
     return response.json() as Promise<{ token: string }>
   },
