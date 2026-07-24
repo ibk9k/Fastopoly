@@ -13,7 +13,7 @@ describe('timing constants', () => {
     expect(TURN_TIMEOUT_MS).toBe(25_000)
     expect(DEBT_TIMEOUT_MS).toBe(80_000)
     expect(AUCTION_DURATION_MS).toBe(30_000)
-    expect(AUCTION_EXTENSION_MS).toBe(30_000)
+    expect(AUCTION_EXTENSION_MS).toBe(5_000)
   })
 
   it('re-exports the same values from server-state', () => {
@@ -25,10 +25,11 @@ describe('timing constants', () => {
     expect(DEBT_TIMEOUT_MS).toBeGreaterThan(TURN_TIMEOUT_MS)
   })
 
-  it('never extends an auction beyond its own full length', () => {
-    // A larger extension than the base duration would let one bidder stretch an
-    // auction indefinitely past what the UI advertises as the maximum.
-    expect(AUCTION_EXTENSION_MS).toBeLessThanOrEqual(AUCTION_DURATION_MS)
+  it('keeps the anti-snipe window well inside the auction length', () => {
+    // Strictly less, not <=. If the extension equals the duration then every bid
+    // lands "inside the final window" and re-arms the whole auction, so it never
+    // ends while anyone keeps bidding — that shipped once and had to be reverted.
+    expect(AUCTION_EXTENSION_MS).toBeLessThan(AUCTION_DURATION_MS / 2)
   })
 
   it('warns before time runs out, but not for most of the turn', () => {

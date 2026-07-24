@@ -20,10 +20,14 @@ export const DEBT_TIMEOUT_MS = 80_000
 export const AUCTION_DURATION_MS = 30_000
 
 /**
- * Anti-sniping: a bid landing inside this window pushes the deadline back out to
- * it, so a late bid always leaves room for a counter-bid.
+ * Anti-sniping. Only a bid landing inside this final window touches the clock,
+ * and it resets the clock to exactly this window — just enough for a counter-bid.
+ *
+ * Keep this well under AUCTION_DURATION_MS. Setting the two equal means EVERY bid
+ * re-arms the full auction (the remaining time is always inside the window), so
+ * an auction never ends while anyone keeps bidding.
  */
-export const AUCTION_EXTENSION_MS = 30_000
+export const AUCTION_EXTENSION_MS = 5_000
 
 /** Seconds remaining at which timer UI switches to the urgent (red) treatment. */
 export const URGENT_THRESHOLD_SECONDS = 8
