@@ -148,8 +148,9 @@ export default function Room({ roomId, children }: { roomId: string; children: R
     return (
       <div className="min-h-screen bg-[#F7F0E4] p-8 text-zinc-900 flex items-center justify-center font-sans">
         <div className="w-full max-w-sm rounded-2xl border-[3px] border-[#2f4d20] bg-[#BAED91] p-6 shadow-2xl text-center">
-          <h2 className="text-3xl font-black tracking-wider text-[#2f4d20] uppercase">Fastopoly</h2>
-          <p className="mt-2 text-sm font-bold text-[#2f4d20]/80">Enter a username to join the game room.</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/Logo.png" alt="Fastopoly" width={951} height={393} className="mx-auto h-auto w-56 max-w-full" />
+          <p className="mt-3 text-sm font-bold text-[#2f4d20]/80">Enter a username to join the game room.</p>
           <input
             value={inputName}
             onChange={(e) => setInputName(e.target.value)}

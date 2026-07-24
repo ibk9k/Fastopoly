@@ -153,8 +153,15 @@ function HomePageInner() {
       <PropertyStrip position="top" />
 
       <section className="z-0 flex w-full max-w-md flex-col items-center py-16 text-center">
-        <h1 className="font-display text-6xl uppercase tracking-normal text-pine drop-shadow-sm sm:text-7xl">Fastopoly</h1>
-        <p className="mt-3 text-lg font-bold text-pine/75">Play with friends, anywhere</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/Logo.png"
+          alt="Fastopoly"
+          width={951}
+          height={393}
+          className="h-auto w-72 max-w-full sm:w-80"
+        />
+        <p className="mt-4 text-lg font-bold text-pine/75">Play with friends, anywhere</p>
 
         {error ? (
           <p role="alert" className="mt-4 w-full rounded-md border border-danger-line bg-danger-surface px-3 py-2 text-sm font-bold text-danger">
@@ -308,7 +315,8 @@ function HomePageInner() {
             className="w-full max-w-sm rounded-xl border-[3px] border-pine bg-parchment-raised p-6 shadow-overlay"
             onClick={(event) => event.stopPropagation()}
           >
-            <h2 className="text-left font-display text-xl uppercase tracking-wide text-pine">Play Fastopoly</h2>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/Logo.png" alt="Fastopoly" width={951} height={393} className="mx-auto h-auto w-44" />
             <div className="mt-5 grid gap-3">
               <Button size="lg" loading={creating} onClick={() => void createRoomAndRedirect()}>
                 {creating ? 'Creating…' : 'Host a game'}
