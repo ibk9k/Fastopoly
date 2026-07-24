@@ -210,13 +210,13 @@ export default function GameBoard() {
   }
 
   return (
-    <main className="game-root h-screen overflow-hidden bg-parchment px-4 pt-4 text-zinc-900 lg:px-6 lg:pt-6">
+    <main className="game-root min-h-screen overflow-y-auto bg-parchment px-4 pt-4 text-zinc-900 lg:h-screen lg:overflow-hidden lg:px-6 lg:pt-6">
       <ConnectionBanner />
       <BankruptcyOverlay />
 
       <div
-        className={`relative mx-auto flex h-full max-w-[1400px] justify-center gap-5 ${
-          isLobby ? 'items-center' : 'items-stretch'
+        className={`relative mx-auto flex h-auto max-w-[1400px] flex-col justify-center gap-5 lg:h-full lg:flex-row ${
+          isLobby ? 'lg:items-center' : 'lg:items-stretch'
         }`}
       >
         {/* Left rail: lobby settings (desktop only, lobby phase only) */}
@@ -231,7 +231,7 @@ export default function GameBoard() {
         </aside>
 
         {/* Center: the board */}
-        <section className="flex min-w-0 flex-1 flex-col items-center justify-center self-center pb-4">
+        <section className="flex w-full min-w-0 flex-col items-center justify-center pb-4 lg:w-auto lg:flex-1 lg:self-center">
           <Board />
         </section>
 
