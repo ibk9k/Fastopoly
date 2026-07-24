@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { calculatePlayerNetWorth, formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
+import { getStoredHostToken } from '@/lib/game-client/tokens'
 import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import type { PlayerResult } from '@/lib/game-engine/scoring'
 
@@ -24,7 +25,8 @@ export default function EndGameScreen() {
   const calledRef = useRef(false)
 
   const selfPlayer = resolveLocalPlayer(players, self)
-  const shouldPersistResults = players[0]?.id === selfPlayer?.id
+  // /api/game/end is host-only; only the client holding the host token persists final scores.
+  const shouldPersistResults = players[0]?.id === selfPlayer?.id && Boolean(roomId && getStoredHostToken(roomId))
 
   useEffect(() => {
     if (!roomId || calledRef.current || !shouldPersistResults) return
@@ -72,7 +74,7 @@ export default function EndGameScreen() {
             </Link>
           </div>
 
-          {error ? <p className="mt-5 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</p> : null}
+          {error ? <p className="mt-5 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">{error}</p> : null}
 
           <div className="mt-8 grid gap-3">
             {standings.map((result) => {

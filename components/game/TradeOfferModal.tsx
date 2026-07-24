@@ -19,16 +19,31 @@ type TradeToast = {
   createdAt: number
 }
 
-function OfferSide({ title, propertyIds, cash }: { title: string; propertyIds: readonly string[]; cash: number }) {
+function OfferSide({
+  title,
+  propertyIds,
+  cash,
+  jailCards = 0,
+}: {
+  title: string
+  propertyIds: readonly string[]
+  cash: number
+  jailCards?: number
+}) {
   return (
     <div className="rounded-md border border-[#e58a74]/30 bg-white/50 p-4">
       <h3 className="font-bold text-zinc-900">{title}</h3>
       <div className="mt-3 grid gap-2 text-sm text-zinc-800">
         {cash > 0 ? <p className="font-semibold">{formatMoney(cash)} cash</p> : null}
+        {jailCards > 0 ? (
+          <p className="font-semibold">
+            {jailCards} Get Out of Jail card{jailCards > 1 ? 's' : ''}
+          </p>
+        ) : null}
         {propertyIds.map((propertyId) => (
           <p key={propertyId} className="font-semibold">{propertyDisplayName(propertyId)}</p>
         ))}
-        {cash === 0 && propertyIds.length === 0 ? <p className="text-zinc-600">Nothing</p> : null}
+        {cash === 0 && jailCards === 0 && propertyIds.length === 0 ? <p className="text-zinc-600">Nothing</p> : null}
       </div>
     </div>
   )
@@ -63,7 +78,7 @@ export default function TradeOfferModal({ roomId }: TradeOfferModalProps) {
     setSubmitting(accept ? 'accept' : 'reject')
     setError('')
     try {
-      await postJson<TradeResponse>('/api/game/trade', { roomId, offer, action: 'respond', accept })
+      await postJson<TradeResponse>('/api/game/trade', { roomId, playerId: selfPlayer?.id, offer, action: 'respond', accept })
     } catch (responseError) {
       setError(responseError instanceof Error ? responseError.message : 'Trade response failed')
     } finally {
@@ -78,13 +93,13 @@ export default function TradeOfferModal({ roomId }: TradeOfferModalProps) {
   return (
     <>
       {toast ? (
-        <div className="fixed right-4 top-16 z-40 max-w-sm rounded-md border border-[#d28b7a] bg-[#EFA38F] px-4 py-3 text-sm font-semibold text-zinc-900 shadow-2xl">
+        <div className="fixed right-4 top-16 z-toast max-w-sm rounded-md border border-[#d28b7a] bg-[#EFA38F] px-4 py-3 text-sm font-semibold text-zinc-900 shadow-2xl">
           {toast.from} offered a trade to {toast.to}
         </div>
       ) : null}
 
       {tradeOffer && isRecipient ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
           <section className="w-full max-w-2xl rounded-lg border border-[#d28b7a] bg-[#F7F0E4] p-5 shadow-2xl">
             <div>
               <p className="text-sm uppercase tracking-[0.18em] text-zinc-700 font-bold">Trade offer</p>
@@ -93,8 +108,18 @@ export default function TradeOfferModal({ roomId }: TradeOfferModalProps) {
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <OfferSide title={`${fromPlayer?.username ?? 'They'} gives`} propertyIds={tradeOffer.offeredProperties} cash={tradeOffer.offeredCash} />
-              <OfferSide title="You give" propertyIds={tradeOffer.requestedProperties} cash={tradeOffer.requestedCash} />
+              <OfferSide
+                title={`${fromPlayer?.username ?? 'They'} gives`}
+                propertyIds={tradeOffer.offeredProperties}
+                cash={tradeOffer.offeredCash}
+                jailCards={tradeOffer.offeredJailCards}
+              />
+              <OfferSide
+                title="You give"
+                propertyIds={tradeOffer.requestedProperties}
+                cash={tradeOffer.requestedCash}
+                jailCards={tradeOffer.requestedJailCards}
+              />
             </div>
 
             {error ? <p className="mt-4 text-sm font-bold text-red-900">{error}</p> : null}

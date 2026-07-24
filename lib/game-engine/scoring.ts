@@ -1,4 +1,5 @@
 import type { Player, Property } from '@/lib/liveblocks.config'
+import { COLOR_GROUPS } from './board'
 
 export type PlayerResult = {
   playerId: string
@@ -26,7 +27,12 @@ export function calculateScores(players: Player[], properties: Map<string, Prope
       const bonuses: string[] = []
       let pointsEarned = (placementPoints.get(index + 1) ?? 0) + 25
 
-      if ((player.ownedColorGroups ?? []).length > 0) {
+      // Computed from the final board state — the old `ownedColorGroups` field was
+      // never populated during play, so this bonus could not fire before.
+      const ownsFullGroup = Object.values(COLOR_GROUPS).some(
+        (groupIds) => groupIds.length > 0 && groupIds.every((id) => properties.get(id)?.ownerId === player.id),
+      )
+      if (ownsFullGroup) {
         pointsEarned += 50
         bonuses.push('Owned a full color group')
       }

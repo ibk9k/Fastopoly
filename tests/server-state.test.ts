@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest'
+import { DEBT_TIMEOUT_MS, TURN_TIMEOUT_MS, endTurn, handlePostLanding, refreshTurnDeadline } from '@/lib/game-engine/server-state'
+import { resolveLanding } from '@/lib/game-engine/actions'
+import { makePlayer, makeProperty, makeStorage } from './factories'
+
+describe('turn deadline — debt window', () => {
+  it('gives a solvent active player the normal turn window', () => {
+    const storage = makeStorage({ players: [makePlayer({ id: 'player-0', cash: 500 })] })
+    refreshTurnDeadline(storage)
+    const remaining = (storage.turnDeadline ?? 0) - Date.now()
+    expect(remaining).toBeGreaterThan(TURN_TIMEOUT_MS - 1000)
+    expect(remaining).toBeLessThan(TURN_TIMEOUT_MS + 1000)
+  })
+
+  it('gives an in-debt active player the longer debt window (1:20)', () => {
+    const storage = makeStorage({ players: [makePlayer({ id: 'player-0', cash: -344 })] })
+    refreshTurnDeadline(storage)
+    const remaining = (storage.turnDeadline ?? 0) - Date.now()
+    expect(DEBT_TIMEOUT_MS).toBe(80_000)
+    expect(remaining).toBeGreaterThan(DEBT_TIMEOUT_MS - 1000)
+  })
+
+  it('extends the deadline to the debt window when rent drives the player negative', () => {
+    const props = makePropertyMapWithOwnedBoardwalk()
+    const payer = makePlayer({ id: 'player-0', position: 39, cash: 20 }) // Boardwalk, can't afford rent
+    const owner = makePlayer({ id: 'player-1', cash: 100 })
+    const storage = makeStorage({ players: [payer, owner], properties: props })
+    resolveLanding(storage, payer) // pays $50 rent -> cash -30, handlePostLanding refreshes deadline
+    expect(payer.cash).toBeLessThan(0)
+    const remaining = (storage.turnDeadline ?? 0) - Date.now()
+    expect(remaining).toBeGreaterThan(TURN_TIMEOUT_MS + 1000) // longer than a normal turn
+  })
+})
+
+function makePropertyMapWithOwnedBoardwalk() {
+  return { boardwalk: makeProperty('boardwalk', { ownerId: 'player-1' }) }
+}
+
+describe('endTurn — win detection', () => {
+  it('ends the game when only one non-bankrupt player remains', () => {
+    const p0 = makePlayer({ id: 'player-0' })
+    const p1 = makePlayer({ id: 'player-1', isBankrupt: true })
+    const storage = makeStorage({ players: [p0, p1], currentPlayerIndex: 0 })
+    endTurn(storage)
+    expect(storage.gamePhase).toBe('ended')
+    expect(storage.winnerIds).toEqual(['player-0'])
+  })
+})
+
+describe('endTurn — debt limbo', () => {
+  it('keeps a negative-cash player active instead of advancing', () => {
+    const p0 = makePlayer({ id: 'player-0', cash: -50 })
+    const p1 = makePlayer({ id: 'player-1' })
+    const storage = makeStorage({ players: [p0, p1], currentPlayerIndex: 0 })
+    endTurn(storage)
+    expect(storage.currentPlayerIndex).toBe(0)
+    expect(storage.gamePhase).toBe('playing')
+    expect(storage.log.at(-1)?.message).toContain('in debt')
+  })
+})
+
+describe('endTurn — doubles', () => {
+  it('grants another roll and does not advance the turn', () => {
+    const p0 = makePlayer({ id: 'player-0' })
+    const p1 = makePlayer({ id: 'player-1' })
+    const storage = makeStorage({ players: [p0, p1], currentPlayerIndex: 0, lastRollWasDoubles: true, hasRolled: true })
+    endTurn(storage)
+    expect(storage.currentPlayerIndex).toBe(0)
+    expect(storage.hasRolled).toBe(false)
+    expect(storage.lastRollWasDoubles).toBe(false)
+  })
+})
+
+describe('endTurn — normal advance', () => {
+  it('advances to the next player and resets hasRolled', () => {
+    const storage = makeStorage({
+      players: [makePlayer({ id: 'player-0' }), makePlayer({ id: 'player-1' })],
+      currentPlayerIndex: 0,
+      hasRolled: true,
+    })
+    endTurn(storage)
+    expect(storage.currentPlayerIndex).toBe(1)
+    expect(storage.hasRolled).toBe(false)
+  })
+
+  it('skips bankrupt players when advancing', () => {
+    const storage = makeStorage({
+      players: [
+        makePlayer({ id: 'player-0' }),
+        makePlayer({ id: 'player-1', isBankrupt: true }),
+        makePlayer({ id: 'player-2' }),
+      ],
+      currentPlayerIndex: 0,
+    })
+    endTurn(storage)
+    expect(storage.currentPlayerIndex).toBe(2)
+  })
+})
+
+describe('handlePostLanding', () => {
+  it('returns to the playing phase after a normal landing', () => {
+    const storage = makeStorage({ gamePhase: 'landed', lastRollWasDoubles: false })
+    handlePostLanding(storage)
+    expect(storage.gamePhase).toBe('playing')
+  })
+
+  it('re-arms the roll on doubles', () => {
+    const storage = makeStorage({ gamePhase: 'landed', lastRollWasDoubles: true, hasRolled: true })
+    handlePostLanding(storage)
+    expect(storage.hasRolled).toBe(false)
+    expect(storage.lastRollWasDoubles).toBe(false)
+  })
+})
+
+describe('go-to-jail on doubles forfeits the turn (fixed in Phase 3)', () => {
+  it('advances to the next player instead of re-arming the roll', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 30 })
+    const p1 = makePlayer({ id: 'player-1' })
+    const storage = makeStorage({ players: [p0, p1], currentPlayerIndex: 0, lastRollWasDoubles: true, hasRolled: true })
+    resolveLanding(storage, p0)
+    expect(p0.inJail).toBe(true)
+    expect(storage.currentPlayerIndex).toBe(1) // turn passed — jail overrides doubles
+    expect(storage.lastRollWasDoubles).toBe(false)
+  })
+})

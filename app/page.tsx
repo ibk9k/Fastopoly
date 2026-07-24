@@ -1,99 +1,147 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
 import { customAlphabet } from 'nanoid'
+import { setStoredHostToken } from '@/lib/game-client/tokens'
+import { useAuth } from '@/components/auth/AuthProvider'
+import Button from '@/components/ui/Button'
+import PropertyStrip from '@/components/ui/PropertyStrip'
+import GoogleIcon from '@/components/auth/GoogleIcon'
 
-const usernameKey = 'fastopoly_username'
 const createCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 5)
 
-const pastelColors = [
-  '#C2A691', // Brown
-  '#A8DADC', // Light Blue
-  '#F1A7C4', // Pink
-  '#FBC490', // Orange
-  '#E5989B', // Red
-  '#F9E076', // Yellow
-  '#A3C9A8', // Green
-  '#90B0D9', // Dark Blue
-]
+const inputClass =
+  'w-full rounded-lg border-2 border-pine/20 bg-parchment/40 px-4 py-3 font-bold text-pine placeholder-zinc-400 outline-none transition-all focus:border-pine'
 
-export default function HomePage() {
+function HomePageInner() {
   const router = useRouter()
-  const [showPlayModal, setShowPlayModal] = useState(false)
-  const [showNameModal, setShowNameModal] = useState(false)
-  const [username, setUsername] = useState('')
-  const [creating, setCreating] = useState(false)
+  const searchParams = useSearchParams()
+  const { user, profile, ready, signInAsGuest, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut } = useAuth()
+
+  const [name, setName] = useState('')
+  const [emailMode, setEmailMode] = useState<'hidden' | 'signin' | 'signup'>('hidden')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [showPlayModal, setShowPlayModal] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
 
+  // Surface OAuth errors handed back by /auth/callback.
   useEffect(() => {
-    setUsername(localStorage.getItem(usernameKey) ?? '')
-  }, [])
+    const authError = searchParams.get('authError')
+    if (authError) setError(authError)
+  }, [searchParams])
 
+  const signedIn = Boolean(user)
+  const activeUsername = profile?.username ?? (signedIn ? null : name.trim() || null)
+
+  // Auto-detect if user is already in an active game and redirect directly into it
   useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setShowPlayModal(false)
-        setShowNameModal(false)
-      }
+    if (!ready || !activeUsername) return
+    let isMounted = true
+    fetch(`/api/lobby/active-user-room?username=${encodeURIComponent(activeUsername)}`)
+      .then((res) => res.json())
+      .then((data: { activeRoomId?: string | null }) => {
+        if (!isMounted) return
+        if (data.activeRoomId) {
+          setActiveRoomId(data.activeRoomId)
+          router.replace(`/game/${data.activeRoomId}`)
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      isMounted = false
     }
+  }, [ready, activeUsername, router])
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  function openPlay() {
-    const savedUsername = localStorage.getItem(usernameKey)
-    if (!savedUsername) {
-      setShowNameModal(true)
+  async function handleGuest() {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setError('Enter a name to play')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    const { error: signInError } = await signInAsGuest(trimmed)
+    setBusy(false)
+    if (signInError) {
+      setError(signInError)
       return
     }
     setShowPlayModal(true)
   }
 
-  function confirmUsername() {
-    const trimmed = username.trim()
-    if (!trimmed) return
-    localStorage.setItem(usernameKey, trimmed)
-    sessionStorage.setItem(usernameKey, trimmed)
-    setShowNameModal(false)
-    setShowPlayModal(true)
+  async function handleGoogle() {
+    setBusy(true)
+    setError(null)
+    const { error: oauthError } = await signInWithGoogle()
+    setBusy(false)
+    if (oauthError) setError(oauthError)
+    // On success the browser is redirected to Google.
+  }
+
+  async function handleEmailSubmit() {
+    if (!email.trim() || !password) {
+      setError('Email and password are required')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+
+    const result =
+      emailMode === 'signup'
+        ? await signUpWithEmail(email.trim(), password, name.trim() || email.trim().split('@')[0])
+        : await signInWithEmail(email.trim(), password)
+
+    setBusy(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    if ('needsConfirmation' in result && result.needsConfirmation) {
+      setNotice('Check your email to confirm your account, then sign in.')
+      return
+    }
+    setEmailMode('hidden')
+    setPassword('')
   }
 
   async function createRoomAndRedirect() {
-    const savedUsername = sessionStorage.getItem(usernameKey) ?? localStorage.getItem(usernameKey)
-    if (!savedUsername) {
-      setShowNameModal(true)
+    if (activeRoomId) {
+      router.push(`/game/${activeRoomId}`)
+      return
+    }
+
+    const playerName = profile?.username ?? name.trim()
+    if (!playerName) {
+      setError('Enter a name first')
       return
     }
 
     const roomCode = createCode()
-    const rules = {
-      startingCash: 1500,
-      freeParkingJackpot: false,
-      auctionOnPass: true,
-      speedDie: false,
-      maxPlayers: 4,
-    }
+    const rules = { startingCash: 1500, freeParkingJackpot: false, auctionOnPass: true, speedDie: false, maxPlayers: 4 }
 
     setCreating(true)
     setError(null)
-
-    // TODO: Abandoned lobby rooms accumulate in Supabase with no automatic cleanup.
-    // We should implement a cron or cleanup job to prune rooms that are empty or inactive for more than a few hours.
     const response = await fetch('/api/lobby/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomCode, username: savedUsername, mapType: 'classic', rules, isPublic: true }),
+      body: JSON.stringify({ roomCode, username: playerName, mapType: 'classic', rules, isPublic: true }),
     })
-    const result = (await response.json()) as { roomCode?: string; error?: string }
+    const result = (await response.json()) as { roomCode?: string; hostToken?: string; error?: string }
     setCreating(false)
 
     if (!response.ok || !result.roomCode) {
       setError(result.error ?? 'Could not create room')
       return
     }
+    if (result.hostToken) setStoredHostToken(result.roomCode, result.hostToken)
 
     sessionStorage.setItem('fastopoly_rules', JSON.stringify(rules))
     sessionStorage.setItem('fastopoly_mapType', 'classic')
@@ -101,96 +149,185 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-[#F7F0E4] px-6 text-zinc-900 overflow-hidden font-sans">
-      {/* Top pastel property strip */}
-      <div className="absolute top-0 left-0 right-0 flex h-3 shadow-sm z-10">
-        {pastelColors.map((color, idx) => (
-          <div key={`top-${idx}`} className="flex-1" style={{ backgroundColor: color }} />
-        ))}
-      </div>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-parchment px-6 font-sans text-zinc-900">
+      <PropertyStrip position="top" />
 
-      <section className="flex w-full max-w-xl flex-col items-center text-center py-16 z-0">
-        <h1 className="text-6xl font-black tracking-normal sm:text-7xl text-[#2f4d20] drop-shadow-sm uppercase">Fastopoly</h1>
-        <p className="mt-4 text-lg font-bold text-[#2f4d20]/75">Play with friends, anywhere</p>
-        
-        {error ? <p className="mt-4 text-sm font-black text-rose-700">{error}</p> : null}
-        
-        <button
-          onClick={openPlay}
-          disabled={creating}
-          className="mt-12 w-full max-w-xs rounded-xl bg-[#2f4d20] px-8 py-4 text-lg font-black uppercase tracking-wider text-[#BAED91] border-2 border-[#2f4d20] transition-all hover:bg-[#2f4d20]/95 active:scale-95 shadow-md shadow-[#2f4d20]/15 focus:outline-none disabled:opacity-50"
-        >
-          {creating ? 'Starting...' : 'Play'}
-        </button>
+      <section className="z-0 flex w-full max-w-md flex-col items-center py-16 text-center">
+        <h1 className="font-display text-6xl uppercase tracking-normal text-pine drop-shadow-sm sm:text-7xl">Fastopoly</h1>
+        <p className="mt-3 text-lg font-bold text-pine/75">Play with friends, anywhere</p>
 
-        <Link
-          href="/shop"
-          className="mt-4 w-full max-w-xs rounded-xl border-2 border-[#2f4d20]/25 bg-white px-8 py-3 text-sm font-bold text-[#2f4d20] tracking-wide uppercase transition hover:border-[#2f4d20]/50 active:scale-95 shadow-sm text-center"
-        >
-          Shop
-        </Link>
-        
-        <Link href="/leaderboard" className="mt-6 text-xs font-black uppercase tracking-wider text-[#2f4d20]/60 hover:text-[#2f4d20] transition-colors">
-          Leaderboard
-        </Link>
+        {error ? (
+          <p role="alert" className="mt-4 w-full rounded-md border border-danger-line bg-danger-surface px-3 py-2 text-sm font-bold text-danger">
+            {error}
+          </p>
+        ) : null}
+        {notice ? (
+          <p className="mt-4 w-full rounded-md border border-success/30 bg-success-surface px-3 py-2 text-sm font-bold text-success">{notice}</p>
+        ) : null}
+
+        {!ready ? (
+          <div className="mt-10 h-40 w-full animate-pulse rounded-2xl border-2 border-salmon-line/30 bg-parchment-raised" />
+        ) : signedIn ? (
+          /* ── Signed in: straight to play ─────────────────────────────── */
+          <div className="mt-8 w-full rounded-2xl border-2 border-salmon-line/50 bg-parchment-raised p-6 shadow-card">
+            {activeRoomId ? (
+              <div className="mb-4 rounded-xl border border-pine/30 bg-felt/40 p-3.5 text-center shadow-sm">
+                <p className="text-xs font-black uppercase tracking-wider text-pine">Game in progress</p>
+                <p className="mt-0.5 text-sm font-extrabold text-zinc-800">Room: {activeRoomId}</p>
+                <Button size="sm" className="mt-2.5 w-full" onClick={() => router.push(`/game/${activeRoomId}`)}>
+                  Rejoin Active Game
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-center gap-3">
+              {profile?.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.avatar_url} alt="" className="h-10 w-10 rounded-full border-2 border-pine/20 object-cover" />
+              ) : (
+                <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-pine/20 bg-felt font-display text-lg text-pine">
+                  {(profile?.username ?? '?').slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <div className="text-left">
+                <p className="font-extrabold leading-tight text-pine">{profile?.username ?? 'Player'}</p>
+                <p className="text-xs font-bold text-ink-muted">
+                  {profile?.is_guest ? 'Playing as guest' : 'Signed in'}
+                  {profile ? ` · ${profile.games_played} games · ${profile.wins} wins` : ''}
+                </p>
+              </div>
+            </div>
+
+            <Button size="lg" className="mt-5 w-full" onClick={() => setShowPlayModal(true)}>
+              Play
+            </Button>
+
+            <div className="mt-3 flex items-center justify-center gap-4 text-xs font-bold uppercase tracking-wide">
+              <Link href="/profile" className="text-pine/70 transition-colors hover:text-pine">
+                Profile
+              </Link>
+              <Link href="/leaderboard" className="text-pine/70 transition-colors hover:text-pine">
+                Leaderboard
+              </Link>
+              <button onClick={() => void signOut()} className="text-pine/70 transition-colors hover:text-pine">
+                Sign out
+              </button>
+            </div>
+
+            {profile?.is_guest ? (
+              <p className="mt-4 border-t border-salmon-line/30 pt-3 text-[11px] font-semibold text-ink-muted">
+                Guest stats are saved. Sign in with Google or email later to keep them permanently.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          /* ── Signed out: name, Google, or email ──────────────────────── */
+          <div className="mt-8 w-full rounded-2xl border-2 border-salmon-line/50 bg-parchment-raised p-6 shadow-card">
+            <label htmlFor="player-name" className="block text-left text-xs font-extrabold uppercase tracking-widest text-pine/70">
+              Your name
+            </label>
+            <input
+              id="player-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && emailMode === 'hidden') void handleGuest()
+              }}
+              className={`mt-2 ${inputClass}`}
+              placeholder="e.g. Alex"
+              maxLength={15}
+              autoComplete="nickname"
+            />
+            <Button size="lg" className="mt-3 w-full" loading={busy} onClick={() => void handleGuest()}>
+              Play as guest
+            </Button>
+
+            <div className="my-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-salmon-line/40" />
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">or keep your stats</span>
+              <span className="h-px flex-1 bg-salmon-line/40" />
+            </div>
+
+            <Button variant="secondary" className="w-full" disabled={busy} onClick={() => void handleGoogle()}>
+              <GoogleIcon />
+              Continue with Google
+            </Button>
+
+            {emailMode === 'hidden' ? (
+              <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => setEmailMode('signin')}>
+                Continue with email
+              </Button>
+            ) : (
+              <div className="mt-3 grid gap-2 border-t border-salmon-line/30 pt-3">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className={inputClass}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void handleEmailSubmit()
+                  }}
+                  className={inputClass}
+                  placeholder="Password"
+                  autoComplete={emailMode === 'signup' ? 'new-password' : 'current-password'}
+                />
+                <Button className="w-full" loading={busy} onClick={() => void handleEmailSubmit()}>
+                  {emailMode === 'signup' ? 'Create account' : 'Sign in'}
+                </Button>
+                <button
+                  onClick={() => setEmailMode(emailMode === 'signup' ? 'signin' : 'signup')}
+                  className="text-xs font-bold text-pine/70 underline-offset-2 transition-colors hover:text-pine hover:underline"
+                >
+                  {emailMode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account'}
+                </button>
+              </div>
+            )}
+
+            <Link
+              href="/leaderboard"
+              className="mt-5 block text-xs font-extrabold uppercase tracking-wide text-pine/60 transition-colors hover:text-pine"
+            >
+              Leaderboard
+            </Link>
+          </div>
+        )}
       </section>
 
-      {/* Bottom pastel property strip */}
-      <div className="absolute bottom-0 left-0 right-0 flex h-3 shadow-inner z-10">
-        {pastelColors.map((color, idx) => (
-          <div key={`bottom-${idx}`} className="flex-1" style={{ backgroundColor: color }} />
-        ))}
-      </div>
+      <PropertyStrip position="bottom" />
 
-      {/* Light-themed Name Modal */}
-      {showNameModal ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 px-6 z-50" onClick={() => setShowNameModal(false)}>
-          <div className="w-full max-w-sm rounded-xl border-[3px] border-[#2f4d20] bg-[#fdfbf7] p-6 text-left shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <h2 className="text-xl font-black text-[#2f4d20] uppercase tracking-wide">Choose a username</h2>
-            <p className="mt-1 text-xs font-bold text-zinc-500">Enter your name to host or join games.</p>
-            <input
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') confirmUsername()
-              }}
-              className="mt-5 w-full rounded-lg border-2 border-[#2f4d20]/20 bg-[#F7F0E4]/30 px-4 py-3 font-bold text-[#2f4d20] placeholder-zinc-400 outline-none focus:border-[#2f4d20] transition-all"
-              placeholder="Your name"
-              maxLength={15}
-              autoFocus
-            />
-            <button
-              onClick={confirmUsername}
-              className="mt-4 w-full rounded-lg bg-[#2f4d20] px-4 py-3 font-black uppercase tracking-wider text-[#BAED91] hover:bg-[#2f4d20]/90 active:scale-[0.98] transition-all shadow-sm"
-            >
-              Confirm
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Light-themed Play Choice Modal */}
       {showPlayModal ? (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 px-6 z-50" onClick={() => setShowPlayModal(false)}>
-          <div className="w-full max-w-sm rounded-xl border-[3px] border-[#2f4d20] bg-[#fdfbf7] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <h2 className="text-left text-xl font-black text-[#2f4d20] uppercase tracking-wide">Play Fastopoly</h2>
-            <div className="mt-5 grid gap-3.5">
-              <button
-                onClick={createRoomAndRedirect}
-                className="rounded-lg bg-[#2f4d20] px-4 py-3 font-black uppercase tracking-wider text-[#BAED91] hover:bg-[#2f4d20]/90 active:scale-[0.98] transition-all shadow-sm"
-              >
-                Host a game
-              </button>
-              <button
-                onClick={() => router.push('/lobby/join')}
-                className="rounded-lg border-2 border-[#2f4d20]/25 bg-white px-4 py-3 font-bold text-[#2f4d20] hover:border-[#2f4d20]/50 active:scale-[0.98] transition-all shadow-sm uppercase tracking-wide text-sm"
-              >
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50 px-6" onClick={() => setShowPlayModal(false)}>
+          <div
+            className="w-full max-w-sm rounded-xl border-[3px] border-pine bg-parchment-raised p-6 shadow-overlay"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-left font-display text-xl uppercase tracking-wide text-pine">Play Fastopoly</h2>
+            <div className="mt-5 grid gap-3">
+              <Button size="lg" loading={creating} onClick={() => void createRoomAndRedirect()}>
+                {creating ? 'Creating…' : 'Host a game'}
+              </Button>
+              <Button variant="secondary" onClick={() => router.push('/lobby/join')}>
                 Join a game
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       ) : null}
     </main>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={null}>
+      <HomePageInner />
+    </Suspense>
   )
 }

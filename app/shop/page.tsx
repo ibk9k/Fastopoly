@@ -1,15 +1,23 @@
 import Link from 'next/link'
+import PropertyStrip from '@/components/ui/PropertyStrip'
 
 export default function ShopPage() {
   return (
-    <main className="min-h-screen bg-[#0a0a0a] px-6 py-16 text-white">
+    <main className="relative min-h-screen bg-parchment px-6 py-16 text-pine">
+      <PropertyStrip position="top" />
       <div className="mx-auto max-w-3xl">
-        <h1 className="text-4xl font-bold">Shop</h1>
-        <p className="mt-4 text-zinc-400">Coming soon - earn points by winning games to unlock skins and maps.</p>
-        <Link href="/" className="mt-8 inline-flex rounded-md border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 hover:border-zinc-500">
+        <h1 className="font-display text-4xl uppercase tracking-wide">Shop</h1>
+        <p className="mt-4 font-semibold text-pine/70">
+          Coming soon — win games to earn points, then spend them on token skins and new maps.
+        </p>
+        <Link
+          href="/"
+          className="mt-8 inline-flex rounded-md border-2 border-salmon-line/50 bg-parchment-raised px-4 py-2 text-sm font-extrabold uppercase tracking-wide text-pine transition-colors hover:border-pine/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-pine"
+        >
           Back home
         </Link>
       </div>
+      <PropertyStrip position="bottom" />
     </main>
   )
 }

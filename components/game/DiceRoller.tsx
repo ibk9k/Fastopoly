@@ -51,7 +51,7 @@ export default function DiceRoller({
     onClick?.()
   }
 
-  const isClickable = onClick && !isRolling && !disabled
+  const isClickable = Boolean(onClick) && !isRolling && !disabled
 
   const sceneProps: DiceSceneProps = {
     rollTrigger,
@@ -60,29 +60,49 @@ export default function DiceRoller({
     onRollComplete: handleRollComplete,
   }
 
-  return (
+  const inner = (
     <div
-      onClick={isClickable ? handleLocalClick : undefined}
-      className={`flex flex-col items-center justify-center select-none transition-all duration-200 ${
-        isClickable ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
+      className="relative flex items-center justify-center"
+      style={{ width: `calc(${sizeValue} * 3.2)`, height: canvasHeight }}
+    >
+      {glow && (
+        // A square glow centered on the dice, sized off canvasHeight (not the wide 2:1
+        // container) — inset-0 on that non-square box clipped the circular gradient into
+        // a pill/ring at the top and bottom. This one has room to stay a full soft circle.
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse"
+          style={{
+            width: `calc(${canvasHeight} * 1.8)`,
+            height: `calc(${canvasHeight} * 1.8)`,
+            background: 'radial-gradient(circle, rgba(255,235,120,0.55) 0%, rgba(255,235,120,0) 70%)',
+          }}
+        />
+      )}
+      <DiceCanvas {...sceneProps} />
+    </div>
+  )
+
+  // ALWAYS the same element type. Switching between <button> and <div> here made
+  // React remount the subtree — including the three.js <Canvas> — on every turn
+  // change and roll start, leaking a WebGL context each time (browsers then kill
+  // the oldest context → glitched dice + degrading performance). A single stable
+  // <button> keeps the canvas mounted for the whole game; `disabled` covers the
+  // non-actionable states and keeps it out of the tab order as a dead control.
+  return (
+    <button
+      type="button"
+      onClick={handleLocalClick}
+      disabled={!isClickable}
+      aria-label={isRolling ? 'Rolling the dice' : isClickable ? 'Roll the dice' : 'Dice (waiting for your turn)'}
+      // No focus ring here: Modal restores focus programmatically, which browsers treat
+      // as :focus-visible — that painted a dark pine ring around the dice on the felt.
+      // The golden glow + hover scale carry the affordance instead.
+      className={`flex select-none flex-col items-center justify-center appearance-none border-0 bg-transparent p-0 outline-none focus:outline-none ${
+        isClickable ? 'cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95' : 'cursor-default opacity-90'
       }`}
     >
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes dice-glow-pulse {
-          from { filter: drop-shadow(0 0 8px rgba(255, 235, 120, 0.75)) drop-shadow(0 0 3px rgba(255, 235, 120, 0.5)); }
-          to { filter: drop-shadow(0 0 20px rgba(255, 235, 120, 0.98)) drop-shadow(0 0 8px rgba(255, 235, 120, 0.8)); }
-        }
-        .dice-glow {
-          animation: dice-glow-pulse 1.2s infinite alternate;
-        }
-      `}} />
-
-      <div
-        className={`flex items-center justify-center ${glow ? 'dice-glow' : ''}`}
-        style={{ width: `calc(${sizeValue} * 3.2)`, height: canvasHeight }}
-      >
-        <DiceCanvas {...sceneProps} />
-      </div>
-    </div>
+      {inner}
+    </button>
   )
 }

@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { getTile } from '@/lib/game-engine/board'
-import { useOthers, useSelf, useStorage } from '@/lib/liveblocks.config'
+import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import { colorForGroup, formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
 
 type AuctionPanelProps = {
@@ -13,18 +13,13 @@ type AuctionPanelProps = {
 
 export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
   const self = useSelf()
-  const others = useOthers()
+
   const storedPlayers = useStorage((root) => root.players)
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
 
-  const isResponsible = useMemo(() => {
-    if (!self || typeof self.connectionId !== 'number') return false
-    const activeIds = [
-      self.connectionId,
-      ...others.map((o) => o.connectionId).filter((id): id is number => typeof id === 'number'),
-    ].sort((a, b) => a - b)
-    return self.connectionId === activeIds[0]
-  }, [self, others])
+  // Any seated client fires resolution when the timer expires — the server-side
+  // resolver is idempotent and atomic, so concurrent calls are safe, and the
+  // auction can no longer stall because one elected client disconnected.
   
   const auctionPropertyId = useStorage((root) => root.auctionPropertyId)
   const storedAuctionBids = useStorage((root) => root.auctionBids)
@@ -58,16 +53,16 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
       auctionEndTime > 0 &&
       currentTime >= auctionEndTime &&
       gamePhase === 'auction' &&
-      isResponsible &&
       !resolving &&
-      auctionPropertyId
+      auctionPropertyId &&
+      selfPlayer
     ) {
       setResolving(true)
-      postJson('/api/game/auction-resolve', { roomId })
+      postJson('/api/game/auction-resolve', { roomId, playerId: selfPlayer.id })
         .catch((err) => console.error('Failed to auto-resolve auction:', err))
         .finally(() => setResolving(false))
     }
-  }, [currentTime, auctionEndTime, gamePhase, resolving, roomId, auctionPropertyId, isResponsible])
+  }, [currentTime, auctionEndTime, gamePhase, resolving, roomId, auctionPropertyId, selfPlayer])
 
   const timeRemaining = Math.max(0, Math.ceil((auctionEndTime - currentTime) / 1000))
   const isExpired = timeRemaining <= 0
@@ -229,7 +224,7 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
   const isTimeCritical = timeRemaining <= 10
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/70 px-4 py-8 text-zinc-900">
       <section className="w-full max-w-3xl rounded-xl border-2 border-[#d28b7a] bg-[#F7F0E4] p-5 shadow-2xl">
         {/* Header with Title and Countdown */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#d28b7a]/30 pb-3">

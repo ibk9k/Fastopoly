@@ -36,7 +36,3 @@ export function getQuaternionForFace(value: number): THREE.Quaternion {
 
   return orientation
 }
-
-export function combineQuaternions(a: THREE.Quaternion, b: THREE.Quaternion): THREE.Quaternion {
-  return a.clone().multiply(b)
-}

@@ -7,34 +7,14 @@ import PlayerToken from '@/components/game/PlayerToken'
 import PropertyDetailModal from '@/components/game/PropertyDetailModal'
 import { BOARD, getTile } from '@/lib/game-engine/board'
 import { tileIndexToGridPosition } from '@/lib/game-engine/board-layout'
-import { formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
-import { useSelf, useStorage, useEventListener } from '@/lib/liveblocks.config'
+import { formatMoney, resolveLocalPlayer } from '@/components/game/helpers'
+import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import { useParams } from 'next/navigation'
 import CardsListModal from '@/components/game/CardsListModal'
+import FlyingCard from '@/components/game/FlyingCard'
 import { CHANCE_CARDS, COMMUNITY_CHEST_CARDS } from '@/lib/game-engine/cards'
 import DiceRoller from '@/components/game/DiceRoller'
-
-type RollResponse = {
-  dice: [number, number]
-  newPosition: number
-  passedGo: boolean
-}
-
-type LandResponse = {
-  action: string
-  amount?: number
-  property?: {
-    id: string
-    name: string
-    price?: number
-  }
-}
-
-type JailResponse = {
-  success: boolean
-  dice?: [number, number]
-  canRoll?: boolean
-}
+import { useGameActions } from '@/hooks/useGameActions'
 
 export default function Board() {
   const params = useParams<{ roomId: string }>()
@@ -57,63 +37,6 @@ export default function Board() {
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null)
   const [activeCardList, setActiveCardList] = useState<'chance' | 'community_chest' | null>(null)
 
-  type AnimatedCardState = {
-    text: string
-    cardType: 'chance' | 'community'
-    startX: number
-    startY: number
-    visible: boolean
-    isAnimating: boolean
-  }
-  const [activeDrawnCard, setActiveDrawnCard] = useState<AnimatedCardState | null>(null)
-
-  // Listen to CARD_DRAWN room event
-  useEventListener(({ event }) => {
-    if (event.type === 'CARD_DRAWN') {
-      const deckId = event.cardType === 'chance' ? 'chance-deck-btn' : 'community-chest-deck-btn'
-      const el = document.getElementById(deckId)
-      let startX = window.innerWidth / 2
-      let startY = window.innerHeight / 2
-      if (el) {
-        const rect = el.getBoundingClientRect()
-        startX = rect.left + rect.width / 2
-        startY = rect.top + rect.height / 2
-      }
-
-      setActiveDrawnCard({
-        text: event.text,
-        cardType: event.cardType,
-        startX,
-        startY,
-        visible: true,
-        isAnimating: false,
-      })
-    }
-  })
-
-  // Trigger animation state change and auto-dismiss timer
-  useEffect(() => {
-    if (!activeDrawnCard) return
-
-    let animationTimeout: NodeJS.Timeout
-    let dismissTimeout: NodeJS.Timeout
-
-    if (!activeDrawnCard.isAnimating && activeDrawnCard.visible) {
-      animationTimeout = setTimeout(() => {
-        setActiveDrawnCard((prev) => (prev ? { ...prev, isAnimating: true } : null))
-      }, 50)
-    }
-
-    dismissTimeout = setTimeout(() => {
-      setActiveDrawnCard((prev) => (prev ? { ...prev, visible: false } : null))
-    }, 6000)
-
-    return () => {
-      clearTimeout(animationTimeout)
-      clearTimeout(dismissTimeout)
-    }
-  }, [activeDrawnCard])
-
   // 3D Dice states
   const [isRolling, setIsRolling] = useState(false)
   const rollCompleteResolverRef = useRef<(() => void) | null>(null)
@@ -121,18 +44,27 @@ export default function Board() {
 
   function waitForDiceRollComplete(): Promise<void> {
     return new Promise((resolve) => {
-      rollCompleteResolverRef.current = resolve
+      const finish = () => {
+        rollCompleteResolverRef.current = null
+        resolve()
+      }
+      rollCompleteResolverRef.current = finish
+      // Failsafe: the server has already resolved the roll, so the animation is
+      // purely cosmetic. If it never reports completion — e.g. the tab was
+      // backgrounded and the WebGL context stalled — don't leave isRolling (and
+      // therefore the dice) stuck. 3.5s comfortably exceeds a normal ~1.9s roll.
+      window.setTimeout(finish, 3500)
     })
   }
 
   function handleDiceRollComplete() {
     rollCompleteResolverRef.current?.()
-    rollCompleteResolverRef.current = null
   }
 
   const canRoll = Boolean(selfPlayer && gamePhase === 'playing' && isActivePlayer && !isRolling && !hasRolled && (selfPlayer.cash ?? 0) >= 0)
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const actions = useGameActions(roomId, selfPlayer?.id)
+  const isSubmitting = actions.busyAction !== null
   const rules = useStorage((root) => root.rules)
 
   const pendingBuy = useMemo(() => {
@@ -162,57 +94,30 @@ export default function Board() {
 
   async function handleBuy() {
     if (!selfPlayer || !pendingBuy || isSubmitting) return
-    setIsSubmitting(true)
-    try {
-      await postJson('/api/game/buy', { roomId, playerId: selfPlayer.id, propertyId: pendingBuy.propertyId })
-    } catch (err) {
-      console.error('Failed to buy property:', err)
-    } finally {
-      setIsSubmitting(false)
-    }
+    await actions.buy(pendingBuy.propertyId, pendingBuy.name)
   }
 
   async function handleAuction() {
     if (!selfPlayer || isSubmitting) return
-    setIsSubmitting(true)
-    try {
-      await postJson('/api/game/pass-purchase', { roomId, playerId: selfPlayer.id })
-    } catch (err) {
-      console.error('Failed to auction property:', err)
-    } finally {
-      setIsSubmitting(false)
-    }
+    await actions.passPurchase()
   }
 
   async function handleJailAction(action: 'pay' | 'use_card') {
     if (!selfPlayer || isSubmitting) return
-    setIsSubmitting(true)
-    try {
-      await postJson('/api/game/jail', { roomId, playerId: selfPlayer.id, action })
-    } catch (err) {
-      console.error(`Failed to execute jail action ${action}:`, err)
-    } finally {
-      setIsSubmitting(false)
-    }
+    await actions.jail(action)
   }
 
   async function handleEndTurn() {
     if (!selfPlayer || isSubmitting) return
-    setIsSubmitting(true)
-    try {
-      if (gamePhase === 'buy_decision') {
-        await postJson('/api/game/pass-purchase', { roomId, playerId: selfPlayer.id })
-      } else {
-        await postJson('/api/game/end-turn', { roomId })
-      }
-    } catch (err) {
-      console.error('Failed to end turn:', err)
-    } finally {
-      setIsSubmitting(false)
+    if (gamePhase === 'buy_decision') {
+      await actions.passPurchase()
+    } else {
+      await actions.endTurn()
     }
   }
 
-  // Handle dice click to roll and land
+  // Handle dice click. The server resolves movement AND the landing (rent/card/tax)
+  // in one atomic call — the dice animation is purely visual and gates nothing.
   async function handleDiceClick() {
     if (!canRoll) return
 
@@ -220,24 +125,20 @@ export default function Board() {
     const rollCompletePromise = waitForDiceRollComplete()
     try {
       if (selfPlayer?.inJail) {
-        const result = await postJson<JailResponse>('/api/game/jail', { roomId, playerId: selfPlayer.id, action: 'roll' })
-        if (result.dice) {
+        const result = await actions.jail('roll')
+        if (result?.dice) {
           await rollCompletePromise
         } else {
           rollCompleteResolverRef.current = null
         }
       } else {
-        const rollRes = await postJson<RollResponse>('/api/game/roll', { roomId, playerId: selfPlayer?.id })
-        const [d1, d2] = rollRes.dice
-
-        await rollCompletePromise
-
-        const diceTotal = d1 + d2
-        await postJson<LandResponse>('/api/game/land', { roomId, playerId: selfPlayer?.id, diceTotal })
+        const result = await actions.roll()
+        if (result) {
+          await rollCompletePromise
+        } else {
+          rollCompleteResolverRef.current = null
+        }
       }
-    } catch (err) {
-      console.error('Failed to roll and land:', err)
-      rollCompleteResolverRef.current = null
     } finally {
       setIsRolling(false)
     }
@@ -432,85 +333,7 @@ export default function Board() {
         />
       ) : null}
 
-      {/* Drawn Card Flying Animation Overlay */}
-      {activeDrawnCard && activeDrawnCard.visible && (() => {
-        const winWidth = typeof window !== 'undefined' ? window.innerWidth : 1000
-        const winHeight = typeof window !== 'undefined' ? window.innerHeight : 1000
-        return (
-          <div
-            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${
-              activeDrawnCard.isAnimating ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-            onClick={() => setActiveDrawnCard((prev) => prev ? { ...prev, visible: false } : null)}
-          >
-            <div
-              className="relative select-none rounded-[16px] p-6 shadow-2xl transition-all duration-[850ms] ease-[cubic-bezier(0.175,0.885,0.32,1.275)] w-[260px] h-[360px] flex flex-col justify-between items-center text-center bg-[#FDFBF7] border-[6px]"
-              style={{
-                borderColor: activeDrawnCard.cardType === 'chance' ? '#F89E6C' : '#6ca5fc',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(0,0,0,0.02)',
-                left: activeDrawnCard.isAnimating ? '0px' : `${activeDrawnCard.startX - (winWidth / 2)}px`,
-                top: activeDrawnCard.isAnimating ? '0px' : `${activeDrawnCard.startY - (winHeight / 2)}px`,
-                transform: activeDrawnCard.isAnimating
-                  ? 'scale(1) rotate(720deg)'
-                  : 'scale(0.08) rotate(0deg)',
-                transformOrigin: 'center center',
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header frame */}
-              <div
-                className={`w-full py-2 px-3 rounded-md uppercase font-black tracking-widest text-[11px] border border-black/5 flex items-center justify-center gap-1.5 ${
-                  activeDrawnCard.cardType === 'chance'
-                    ? 'bg-gradient-to-r from-[#FEDEC9] to-[#FCB78F] text-[#7F3D17]'
-                    : 'bg-gradient-to-r from-[#cfe2fe] to-[#a2c8fd] text-[#204a87]'
-                }`}
-              >
-                {activeDrawnCard.cardType === 'chance' ? (
-                  <>
-                    <span>❓</span>
-                    <span>Chance</span>
-                  </>
-                ) : (
-                  <>
-                    <span>💼</span>
-                    <span>Community Chest</span>
-                  </>
-                )}
-              </div>
-
-              {/* Content card body */}
-              <div className="relative flex-1 flex items-center justify-center px-2 py-4">
-                {/* Large watermark behind the text */}
-                <div
-                  className="absolute inset-0 flex items-center justify-center text-[100px] font-black opacity-[0.05] pointer-events-none select-none"
-                  style={{
-                    color: activeDrawnCard.cardType === 'chance' ? '#F89E6C' : '#6ca5fc',
-                  }}
-                >
-                  {activeDrawnCard.cardType === 'chance' ? '?' : 'Chest'}
-                </div>
-
-                {/* Card text description */}
-                <p className="relative z-10 text-[14px] font-extrabold leading-[1.4] text-zinc-800">
-                  {activeDrawnCard.text}
-                </p>
-              </div>
-
-              {/* Footer / Dismiss Button */}
-              <button
-                onClick={() => setActiveDrawnCard((prev) => prev ? { ...prev, visible: false } : null)}
-                className={`w-full py-2 rounded-lg font-bold text-[12px] uppercase tracking-wider text-white shadow-md active:scale-95 transition-all duration-150 ${
-                  activeDrawnCard.cardType === 'chance'
-                    ? 'bg-[#FCB78F] hover:bg-[#F89E6C] active:bg-[#E58A74]'
-                    : 'bg-[#a2c8fd] hover:bg-[#6ca5fc] active:bg-[#204a87]'
-                }`}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        )
-      })()}
+      <FlyingCard />
     </>
   )
 }

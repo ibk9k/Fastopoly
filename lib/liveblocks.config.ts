@@ -35,6 +35,11 @@ export type Player = {
   ownedColorGroups?: string[]
   hasBuiltHotel?: boolean
   bankruptciesCaused?: number
+  /** Set true once this seat's HMAC token has been claimed (claim-once). Never holds the token itself. */
+  tokenClaimed?: boolean
+  /** Supabase auth uid that owns this seat — the identity stats are credited to,
+   * and what lets the same user reclaim their seat from any device. */
+  authUserId?: string
 }
 
 export type Property = {
@@ -63,6 +68,9 @@ export type TradeOffer = {
   requestedProperties: string[]
   offeredCash: number
   requestedCash: number
+  /** Get Out of Jail Free cards included by each side. */
+  offeredJailCards?: number
+  requestedJailCards?: number
   status: 'pending' | 'accepted' | 'rejected'
 }
 
@@ -90,6 +98,11 @@ export type DiceRollState = {
   d1: number
   d2: number
   timestamp: number
+  /** Who rolled, and the tile the dice actually hit BEFORE any card/jail relocation.
+   * Carried in the same storage write as the final position so clients can stage the
+   * token on the landing tile first — an out-of-band event would race the delta. */
+  playerId?: string
+  landedOn?: number
 }
 
 type Presence = {
@@ -104,7 +117,6 @@ export type Storage = {
   currentPlayerIndex: number
   players: LiveList<Player>
   properties: Record<string, Property>
-  bank: number
   freeParkingPool: number
   chanceIndex: number
   communityChestIndex: number
@@ -116,6 +128,12 @@ export type Storage = {
   houseSupply?: number
   hotelSupply?: number
   lastRollWasDoubles?: boolean
+  /** Consecutive doubles rolled this turn — the third sends the roller to jail. */
+  consecutiveDoubles?: number
+  /** Epoch ms by which the current player must act, or their turn is auto-skipped. */
+  turnDeadline?: number
+  /** Set once final scores have been written to Supabase, so persistence is idempotent. */
+  resultsPersisted?: boolean
   auctionPropertyId?: string | null
   auctionBids?: AuctionBid[]
   auctionHighestBid?: number

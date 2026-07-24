@@ -1,6 +1,5 @@
 'use client'
 
-import LobbyWaitingScreen from '@/components/lobby/LobbyWaitingScreen'
 import { useStorage } from '@/lib/liveblocks.config'
 import EndGameScreen from './EndGameScreen'
 import GameBoard from './GameBoard'

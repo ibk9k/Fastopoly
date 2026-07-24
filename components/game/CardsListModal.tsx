@@ -40,7 +40,7 @@ function getActionBadge(card: Card) {
     case 'get_out_of_jail':
       return {
         label: 'Jail Free',
-        className: 'bg-sky-50 text-sky-850 border-sky-200',
+        className: 'bg-sky-50 text-sky-900 border-sky-200',
       }
     default:
       return {
@@ -56,7 +56,7 @@ export default function CardsListModal({ type, cards, onClose }: CardsListModalP
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-8 backdrop-blur-sm"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-black/75 px-4 py-8 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -121,7 +121,7 @@ export default function CardsListModal({ type, cards, onClose }: CardsListModalP
                   <p className="mt-3 text-sm font-semibold leading-relaxed text-zinc-900">
                     {card.text}
                   </p>
-                  <div className="mt-4 flex items-center justify-between border-t border-[#e58a74]/10 pt-2 text-[10px] text-zinc-755">
+                  <div className="mt-4 flex items-center justify-between border-t border-[#e58a74]/10 pt-2 text-[10px] text-zinc-500">
                     <span className="font-mono text-zinc-700">{card.id}</span>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Die from './Die'
 import { getQuaternionForFace } from './dice-orientations'
@@ -58,6 +58,8 @@ export default function DiceScene({
   onRollComplete,
   startRollSignal = 0,
 }: DiceSceneProps) {
+  const invalidate = useThree((state) => state.invalidate)
+  const gl = useThree((state) => state.gl)
   const die1GroupRef = useRef<THREE.Group>(null)
   const die2GroupRef = useRef<THREE.Group>(null)
   const die1Ref = useRef(createDieState(rollTrigger?.d1 ?? 3))
@@ -95,8 +97,10 @@ export default function DiceScene({
       die2Ref.current.spinVelocity = createSpinVelocity()
 
       notifyRolling(true)
+      // Kick the render loop: in frameloop="demand" the canvas is otherwise idle.
+      invalidate()
     },
-    [notifyRolling],
+    [notifyRolling, invalidate],
   )
 
   useEffect(() => {
@@ -108,6 +112,7 @@ export default function DiceScene({
       die1Ref.current = createDieState(rollTrigger.d1)
       die2Ref.current = createDieState(rollTrigger.d2)
       applyGroupTransforms()
+      invalidate()
       return
     }
 
@@ -118,13 +123,33 @@ export default function DiceScene({
         beginRoll(targetRef.current)
       }
     }
-  }, [rollTrigger, beginRoll])
+  }, [rollTrigger, beginRoll, invalidate])
 
   useEffect(() => {
     if (startRollSignal === 0) return
     targetRef.current = null
     beginRoll()
   }, [startRollSignal, beginRoll])
+
+  // Recover from WebGL context loss (common when a tab is backgrounded for a while):
+  // preventDefault lets the browser restore it, and we force a repaint on restore /
+  // when the tab becomes visible — otherwise frameloop="demand" leaves stale/black dice.
+  useEffect(() => {
+    const canvas = gl.domElement
+    const onContextLost = (event: Event) => event.preventDefault()
+    const onContextRestored = () => invalidate()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') invalidate()
+    }
+    canvas.addEventListener('webglcontextlost', onContextLost as EventListener, false)
+    canvas.addEventListener('webglcontextrestored', onContextRestored, false)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      canvas.removeEventListener('webglcontextlost', onContextLost as EventListener)
+      canvas.removeEventListener('webglcontextrestored', onContextRestored)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [gl, invalidate])
 
   function applyGroupTransforms() {
     die1GroupRef.current?.quaternion.copy(die1Ref.current.quaternion)
@@ -196,6 +221,9 @@ export default function DiceScene({
     }
 
     applyGroupTransforms()
+
+    // Keep the demand-driven loop alive only while an animation is in progress.
+    if (phaseRef.current !== 'idle') invalidate()
   })
 
   const identityQuat = new THREE.Quaternion()
