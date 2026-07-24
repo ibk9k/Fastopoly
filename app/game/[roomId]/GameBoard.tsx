@@ -210,7 +210,7 @@ export default function GameBoard() {
   }
 
   return (
-    <main className="game-root min-h-screen overflow-y-auto bg-parchment px-4 pt-4 text-zinc-900 lg:h-screen lg:overflow-hidden lg:px-6 lg:pt-6">
+    <main className="game-root bg-parchment px-4 pt-4 text-zinc-900 lg:h-screen lg:overflow-hidden lg:px-6 lg:pt-6">
       <ConnectionBanner />
       <BankruptcyOverlay />
 
@@ -252,7 +252,13 @@ export default function GameBoard() {
 
         {/* Mobile: tabbed panel below the board */}
         <section className="w-full lg:hidden">
-          <div className="space-y-4 pb-16">
+          {/* During play a fixed ActionPanel overlays the bottom of the screen, so the
+            * tail of this panel needs clearance or it can never be scrolled into view. */}
+          <div
+            className={`space-y-4 ${
+              isLobby ? 'pb-8' : 'pb-[calc(9.5rem+env(safe-area-inset-bottom))]'
+            }`}
+          >
             <div className="grid grid-cols-2 rounded-md border border-salmon-line/40 bg-salmon p-1 shadow-sm">
               <button
                 onClick={() => setMobilePanel('players')}

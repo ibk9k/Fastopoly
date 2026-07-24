@@ -63,6 +63,7 @@ select {
   aspect-ratio: 1 / 1;
   width: 100%;
   max-width: min(92vw, calc(100vh - 48px));
+  max-width: min(92vw, calc(100dvh - 48px));
   container-type: inline-size;
   --bar-size: 2.2cqw;
 }
@@ -82,8 +83,20 @@ select {
 /* ── Game root ────────────────────────────────────────────────────── */
 
 .game-root {
-  /* Prevent any scrolling during gameplay */
-  overscroll-behavior: none;
+  min-height: 100vh;
+  /* dvh tracks the *visible* viewport as the mobile URL bar shows/hides. With vh
+   * alone the page is always ~60-100px taller than the screen, so a swipe only
+   * collapses the browser chrome and the game appears not to scroll at all. */
+  min-height: 100dvh;
+}
+
+@media (min-width: 1024px) {
+  .game-root {
+    /* Desktop is a fixed play surface: nothing scrolls, so don't let an
+     * over-scroll chain to the page behind it. On mobile the document must
+     * scroll normally, so this stays desktop-only. */
+    overscroll-behavior: none;
+  }
 }
 
 /* ── Tile cells ───────────────────────────────────────────────────── */

@@ -42,7 +42,8 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, pla
   const panelClass =
     placement === 'sidebar'
       ? 'relative rounded-lg border border-salmon-line/60 bg-salmon px-4 py-4 text-zinc-900 shadow-card min-h-[180px]'
-      : 'fixed bottom-0 left-0 right-0 z-panel border-t border-salmon-line/60 bg-salmon/95 px-4 py-3 text-zinc-900 shadow-2xl shadow-black/20 backdrop-blur'
+      : // pb clears the iOS home indicator so the buttons stay tappable.
+        'fixed bottom-0 left-0 right-0 z-panel border-t border-salmon-line/60 bg-salmon/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-zinc-900 shadow-2xl shadow-black/20 backdrop-blur'
 
   const tooltipPositionClass = placement === 'sidebar' ? 'top-full mt-2' : 'bottom-full mb-2'
 
