@@ -159,7 +159,7 @@ function HomePageInner() {
           alt="Fastopoly"
           width={951}
           height={393}
-          className="h-auto w-72 max-w-full sm:w-80"
+          className="h-auto w-80 max-w-full sm:w-96 lg:w-[26rem]"
         />
         <p className="mt-4 text-lg font-bold text-pine/75">Play with friends, anywhere</p>
 

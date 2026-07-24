@@ -191,7 +191,7 @@ export default function Board() {
                 <img
                   src="/Logo.png"
                   alt="FASTOPOLY"
-                  className="absolute w-[67.5cqw] h-[28.75cqw] max-w-none object-contain drop-shadow-[0_0.5cqw_0.8cqw_rgba(0,0,0,0.15)] pointer-events-none z-0"
+                  className="absolute w-[46cqw] h-[19cqw] max-w-none object-contain drop-shadow-[0_0.5cqw_0.8cqw_rgba(0,0,0,0.15)] pointer-events-none z-0"
                 />
                 
                 {/* 3D Dice Roller floating on the green felt */}
