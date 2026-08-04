@@ -160,7 +160,9 @@ export type RoomEvent =
   | { type: 'TRADE_OFFERED'; offer: TradeOffer }
   | { type: 'PLAYER_BANKRUPT'; playerId: string; creditorId: string | 'bank' }
   | { type: 'AUCTION_START'; propertyId: string; startingBid: number }
-  | { type: 'SOUND'; sound: 'dice' | 'buy' | 'rent' | 'jail' | 'bankrupt' }
+  // No SOUND event on purpose: a broadcast can arrive before or after the storage
+  // delta that visually explains it (the same race that used to teleport tokens).
+  // Cues are played client-side off the rendered state — see lib/game-client/audio.ts.
 
 export const {
   RoomProvider,

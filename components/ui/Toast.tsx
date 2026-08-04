@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { armAudio, playCue } from '@/lib/game-client/audio'
 
 type ToastKind = 'info' | 'success' | 'error'
 
@@ -28,6 +29,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const nextId = useRef(1)
 
+  // Armed here because this provider is in the root layout: the autoplay unlock
+  // then happens on the player's first click anywhere, well before they reach a
+  // board. Arming only on the game page left the first cue of a session silent.
+  // Still nothing is fetched until that first gesture actually lands.
+  useEffect(() => {
+    armAudio()
+  }, [])
+
   const dismiss = useCallback((id: number) => {
     setToasts((current) => current.filter((item) => item.id !== id))
   }, [])
@@ -35,6 +44,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback(
     (message: string, kind: ToastKind = 'info') => {
       const id = nextId.current++
+      // The single notification channel, so this is the one place a rejected or
+      // invalid action surfaces — and the only place the error cue needs to fire.
+      if (kind === 'error') playCue('ui-error')
       setToasts((current) => [...current.slice(-3), { id, kind, message }])
       window.setTimeout(() => dismiss(id), AUTO_DISMISS_MS)
     },

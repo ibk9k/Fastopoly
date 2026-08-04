@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { playCue } from '@/lib/game-client/audio'
 import { useEventListener } from '@/lib/liveblocks.config'
 
 type AnimatedCardState = {
@@ -31,6 +32,9 @@ export default function FlyingCard() {
       startY = rect.top + rect.height / 2
     }
     setCard({ text: event.text, cardType: event.cardType, startX, startY, visible: true, isAnimating: false })
+    // Safe to drive off the broadcast here: the card flying out is driven by this
+    // same event, so the cue and its visual can't be ordered against each other.
+    playCue('card-draw')
   })
 
   useEffect(() => {

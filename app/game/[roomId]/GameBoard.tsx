@@ -10,6 +10,8 @@ import ConnectionBanner from '@/components/game/ConnectionBanner'
 import GameLog from '@/components/game/GameLog'
 import PlayerDashboard from '@/components/game/PlayerDashboard'
 import PropertyManager from '@/components/game/PropertyManager'
+import GameSounds from '@/components/game/GameSounds'
+import SoundToggle from '@/components/game/SoundToggle'
 import TradeOfferModal from '@/components/game/TradeOfferModal'
 import TradePanel from '@/components/game/TradePanel'
 import TurnTimer from '@/components/game/TurnTimer'
@@ -213,6 +215,8 @@ export default function GameBoard() {
     <main className="game-root bg-parchment px-4 pt-4 text-zinc-900 lg:h-screen lg:overflow-hidden lg:px-6 lg:pt-6">
       <ConnectionBanner />
       <BankruptcyOverlay />
+      <GameSounds isMyTurn={Boolean(selfPlayer?.id) && activePlayer?.id === selfPlayer?.id} />
+      <SoundToggle className="fixed right-3 top-3 z-panel shadow-card !bg-parchment-raised" />
 
       <div
         className={`relative mx-auto flex h-auto max-w-[1400px] flex-col justify-center gap-5 lg:h-full lg:flex-row ${

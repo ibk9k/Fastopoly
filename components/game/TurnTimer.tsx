@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSelf, useOthers, useStorage } from '@/lib/liveblocks.config'
 import { postJson } from '@/components/game/helpers'
+import { playCue } from '@/lib/game-client/audio'
 import { serverNow, syncServerTime } from '@/lib/game-client/server-time'
 import { URGENT_THRESHOLD_SECONDS } from '@/lib/game-engine/timing'
 
@@ -17,6 +18,12 @@ function formatClock(seconds: number): string {
 }
 
 const GRACE_MS = 2000
+
+/**
+ * Seconds left when the warning cue fires. The clip runs ~3 s, so it resolves with
+ * a beat to spare rather than landing on the deadline itself.
+ */
+const WARN_AT_SECONDS = 5
 
 /**
  * Shows the active player's remaining time and, once the deadline lapses, asks
@@ -73,6 +80,19 @@ export default function TurnTimer({ roomId, selfPlayerId, isActivePlayer }: Turn
 
     void postJson('/api/game/enforce-turn', { roomId, playerId: selfPlayerId }).catch(() => undefined)
   }, [runnablePhase, remainingMs, selfPlayerId, roomId, turnDeadline, isDesignatedEnforcer])
+
+  // Warning cue, for the active player only. Keyed on turnDeadline so it fires once
+  // per turn — including when a mid-turn action pushes the deadline out and earns
+  // the player a second warning on the new one.
+  const warnedDeadlineRef = useRef<number>(0)
+  useEffect(() => {
+    if (!runnablePhase || !isActivePlayer || turnDeadline === 0) return
+    if (warnedDeadlineRef.current === turnDeadline) return
+    if (remainingMs > WARN_AT_SECONDS * 1000 || remainingMs <= 0) return
+
+    warnedDeadlineRef.current = turnDeadline
+    playCue('timer-warn')
+  }, [runnablePhase, isActivePlayer, turnDeadline, remainingMs])
 
   if (!runnablePhase || turnDeadline === 0) return null
 

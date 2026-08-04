@@ -3,6 +3,7 @@
 import { useEffect, useReducer, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { tileIndexToFractionalCenter } from '@/lib/game-engine/board-layout'
+import { playCue } from '@/lib/game-client/audio'
 import { useStorage } from '@/lib/liveblocks.config'
 
 const FAN_OFFSETS = [
@@ -54,6 +55,48 @@ export default function PlayerToken() {
 
   const activePlayers = players.filter((player) => !player.isBankrupt)
   const tileCounts = new Map<string, number>()
+
+  // One tap per move, not per tile: the token CSS-transitions straight to its
+  // destination (400 ms), so there are no intermediate hops to voice. A staged
+  // card/jail relocation moves twice and correctly taps twice.
+  const positionSignature = activePlayers
+    .map((player) => {
+      const staged = stageActive && lastDiceRoll?.playerId === player.id
+      return `${player.id}:${staged ? lastDiceRoll!.landedOn! : player.position}`
+    })
+    .join('|')
+  const lastPositionsRef = useRef<Map<string, string> | null>(null)
+
+  useEffect(() => {
+    const next = new Map(
+      positionSignature
+        .split('|')
+        .filter(Boolean)
+        .map((pair) => {
+          const separator = pair.lastIndexOf(':')
+          return [pair.slice(0, separator), pair.slice(separator + 1)] as const
+        }),
+    )
+
+    // Seed silently on mount: a reload must not tap for positions it merely read.
+    if (lastPositionsRef.current === null) {
+      lastPositionsRef.current = next
+      return
+    }
+
+    const previous = lastPositionsRef.current
+    lastPositionsRef.current = next
+
+    // Only an existing token that actually moved taps — a player joining, leaving
+    // or going bankrupt changes the set without moving anything.
+    for (const [id, position] of next) {
+      const before = previous.get(id)
+      if (before !== undefined && before !== position) {
+        playCue('token-step')
+        break
+      }
+    }
+  }, [positionSignature])
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20">

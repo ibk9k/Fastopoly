@@ -1,8 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getTile } from '@/lib/game-engine/board'
+import { playCue } from '@/lib/game-client/audio'
 import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import { colorForGroup, formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
 import { serverNow, syncServerTime } from '@/lib/game-client/server-time'
@@ -35,6 +36,26 @@ export default function AuctionPanel({ roomId, onClose }: AuctionPanelProps) {
 
   const tile = auctionPropertyId ? getTile(auctionPropertyId) : null
   const selfPlayer = resolveLocalPlayer(players, self, activePlayer?.id)
+
+  // Storage-derived so every watcher hears a bid land, not just the panel that sent
+  // it. The bidder is skipped: they already got a click from pressing the button,
+  // and doubling up on your own bid reads as a glitch.
+  const lastBidRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (gamePhase !== 'auction') {
+      lastBidRef.current = null
+      return
+    }
+    if (lastBidRef.current === null) {
+      lastBidRef.current = auctionHighestBid
+      return
+    }
+    const previous = lastBidRef.current
+    lastBidRef.current = auctionHighestBid
+    if (auctionHighestBid > previous && auctionHighestBidderId !== selfPlayer?.id) {
+      playCue('bid')
+    }
+  }, [gamePhase, auctionHighestBid, auctionHighestBidderId, selfPlayer?.id])
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')

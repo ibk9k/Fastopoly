@@ -93,6 +93,8 @@ export default function DiceRoller({
     <button
       type="button"
       onClick={handleLocalClick}
+      // The dice have their own cue; a UI click on top of it just muddies the roll.
+      data-cue="none"
       disabled={!isClickable}
       aria-label={isRolling ? 'Rolling the dice' : isClickable ? 'Roll the dice' : 'Dice (waiting for your turn)'}
       // No focus ring here: Modal restores focus programmatically, which browsers treat

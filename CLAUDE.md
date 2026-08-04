@@ -101,7 +101,40 @@ Browser ◀────────────── WebSocket storage delta �
 - `components/ui/` — `Button`, `Modal` (focus trap/Escape/scroll lock), `Toast`, `PropertyStrip`.
 - `components/game/` — Board, ActionPanel, AuctionPanel, PropertyManager, PropertyDetailModal, TradePanel, TradeOfferModal, DiceRoller (+`dice/` R3F canvas), GameLog, PlayerDashboard, PlayerToken, Tile, BankruptcyOverlay, DebtOverlay, TurnTimer, FlyingCard, ConnectionBanner, CardsListModal, `helpers.ts`.
 - `components/lobby/` — `LobbySettings`, `PlayerList` (one responsive implementation each).
-- `hooks/` — `useGameActions` (all game actions + toast-on-error), `useCountdown`, `useConnectionStatus`, `useTurnSync`.
+- `hooks/` — `useGameActions` (all game actions + toast-on-error), `useCountdown`, `useConnectionStatus`, `useTurnSync`, `useAudioPreference`.
+
+### Audio
+`lib/audio/cues.ts` is the pure cue registry (src, per-cue gain, voice count) plus
+volume/preference resolution — unit tested. `lib/game-client/audio.ts` is the only
+file that touches browser audio: `playCue(cue)` hides preload, the autoplay unlock,
+the voice pool and the persisted mute state. Rules that are load-bearing:
+- **Cues are played locally at the moment the visual starts**, never off a broadcast
+  (`DiceScene.beginRoll` calls `playCue('dice')`). A `SOUND` `RoomEvent` would race
+  the storage delta exactly like the old token-movement broadcast did.
+- **Nothing is fetched before the first user gesture.** `armAudio()` attaches one-shot
+  listeners; clips are created, primed (muted play/pause) and cached only then. This
+  both satisfies the autoplay policy and keeps audio off the first-paint budget.
+- Preference persists in `localStorage` under `fastopoly-audio`; `SoundToggle` (top-right
+  of the game page) flips it. `armAudio()` is called from `ToastProvider` (root layout)
+  so the unlock happens on the first click anywhere. Shipped clips live in
+  `public/audio/`, masters in `assets/original/audio/`.
+
+Cue call sites: `dice` → `DiceScene.beginRoll`; `token-step` → `PlayerToken` (once per
+*move*, not per tile — the token CSS-transitions straight to its destination);
+`buy` → `GameSounds` (unowned→owned transition in storage, so it covers auction wins
+and stays silent on trades); `card-draw` → `FlyingCard`; `turn-start` → `GameSounds`
+and `timer-warn` → `TurnTimer`, both **only for the active player** (everyone hearing
+someone else's countdown is maddening); `trade-offer` → `TradeOfferModal`, recipient
+only (the bystander toast stays silent); `bid` → `AuctionPanel` on a rise in
+`auctionHighestBid`, for everyone except the bidder; `jail`/`jail-out` → `GameSounds`
+on `player.inJail` flipping; `player-join` → `GameSounds` on the lobby peer count
+rising; `trade-accept` → `GameSounds` via `cueForLogMessage`, because acceptance and
+rejection are indistinguishable in storage — only the log line written in the same
+transaction separates them (exact-match, and a test pins it to the route's string); `ui-error` → `ToastProvider`
+on `kind === 'error'`; `ui-click` → **delegated**, one capture-phase `pointerdown`
+listener installed by `armAudio` that fires for every `<button>` and `[role="button"]`,
+not just the `ui/Button` primitive. Opt a control out with `data-cue="none"` (the dice
+do, since they have their own cue). Don't re-add a per-call-site click cue — it double-fires.
 - `middleware.ts` — refreshes the Supabase session cookie on every navigation.
 
 ## Game phase state machine
@@ -154,6 +187,7 @@ Server authority is enforced end-to-end. Clients can neither impersonate via the
 - Guest→Google upgrade silently creates a *separate* account unless Manual linking is enabled in Supabase.
 - `GamePhase` still declares `rolling`, which nothing sets.
 - Dead flags: `speedDie` (rule stored, no logic — UI toggle removed).
+- Only the dice cue has audio so far; the other cues in the sound plan are unrecorded.
 - No e2e tests; multiplayer paths are verified by the two-tab script below.
 
 **Fixed — do not reintroduce:**

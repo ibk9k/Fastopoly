@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { playCue } from '@/lib/game-client/audio'
 import type { TradeOffer } from '@/lib/liveblocks.config'
 import { useEventListener, useSelf, useStorage } from '@/lib/liveblocks.config'
 import { formatMoney, postJson, propertyDisplayName, resolveLocalPlayer } from '@/components/game/helpers'
@@ -87,6 +88,22 @@ export default function TradeOfferModal({ roomId }: TradeOfferModalProps) {
   }
 
   const isRecipient = Boolean(tradeOffer && tradeOffer.toPlayerId === selfPlayer?.id)
+
+  // Only the recipient is pinged — the bystander toast above stays silent. Unlike
+  // the other cues this one does fire on mount with an offer already pending: the
+  // modal genuinely appears on screen at that moment, so it is a new thing to
+  // notice, not a replayed event.
+  const pingedRef = useRef(false)
+  useEffect(() => {
+    if (!isRecipient) {
+      pingedRef.current = false
+      return
+    }
+    if (pingedRef.current) return
+    pingedRef.current = true
+    playCue('trade-offer')
+  }, [isRecipient])
+
   const fromPlayer = tradeOffer ? players.find((player) => player.id === tradeOffer.fromPlayerId) : undefined
   const toPlayer = tradeOffer ? players.find((player) => player.id === tradeOffer.requestedProperties[0]) : undefined
 

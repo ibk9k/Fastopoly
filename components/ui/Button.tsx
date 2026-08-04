@@ -28,6 +28,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'primary', size = 'md', loading = false, disabled, className = '', children, ...rest },
   ref,
 ) {
+  // No click cue here: it is delegated from `armAudio` so raw <button> elements
+  // get it too. Opt a control out with data-cue="none".
   return (
     <button
       ref={ref}

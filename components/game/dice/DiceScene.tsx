@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Die from './Die'
+import { playCue } from '@/lib/game-client/audio'
 import { getQuaternionForFace } from './dice-orientations'
 import {
   BOUNCE_MS,
@@ -97,6 +98,11 @@ export default function DiceScene({
       die2Ref.current.spinVelocity = createSpinVelocity()
 
       notifyRolling(true)
+      // Fired here rather than off a SOUND broadcast: this is the exact frame the
+      // dice start tumbling on this client, so the clip can never race the storage
+      // delta. The clip is ~1.06 s against SPIN_MIN_MS + SETTLE_MS ≈ 1.2 s of
+      // visible rolling, so it lands just before the dice come to rest.
+      playCue('dice')
       // Kick the render loop: in frameloop="demand" the canvas is otherwise idle.
       invalidate()
     },
