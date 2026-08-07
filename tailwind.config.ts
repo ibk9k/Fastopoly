@@ -58,10 +58,12 @@ const config: Config = {
       boxShadow: {
         card: '0 4px 12px rgba(47, 77, 32, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06)',
         overlay: '0 25px 50px -12px rgba(24, 24, 27, 0.35)',
-        // Active-turn marker. One solid band the same colour as the border it sits
-        // against, so the two merge into a single thick edge instead of reading as
-        // two concentric lines, plus a soft bloom to take the hard edge off it.
-        turn: '0 0 0 3px #6BC63F, 0 0 16px 3px rgba(107, 198, 63, 0.45)',
+        // Active-turn marker. INSET on purpose: the player list scrolls inside
+        // `overflow-y-auto overflow-x-hidden`, which clips anything drawn outside a
+        // card's box — an outward ring came out squared off and cut at the sides.
+        // An inset bloom sits within the border radius, so it can never be clipped
+        // and its corners track the card's exactly.
+        turn: 'inset 0 0 0 1px #6BC63F, inset 0 0 12px rgba(107, 198, 63, 0.30)',
       },
     },
   },

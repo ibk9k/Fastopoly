@@ -272,9 +272,14 @@ export default function GameBoard() {
             </div>
           </aside>
         ) : (
-          <aside className="hidden min-w-0 flex-col gap-4 self-center overflow-hidden pb-4 xl:flex">
+          <aside className="hidden min-w-0 flex-col gap-4 self-center overflow-hidden pb-4 xl:flex xl:max-h-full">
             {/* The log moved to the left rail's Comments/Logs panel; this rail is
-              * Actions (and, next, Active Trades) plus Players. */}
+              * Actions (and, next, Active Trades) plus Players.
+              *
+              * max-h-full is what makes the clipping here harmless: without a height
+              * bound the rail grows past the grid row and `overflow-hidden` simply
+              * cuts the overflow off, so PlayerDashboard's own
+              * `flex-1 min-h-0 overflow-y-auto` never had anything to scroll against. */}
             <ActionPanel roomId={roomId} onOpenTrade={() => setTradeOpen(true)} onOpenProperties={() => setPropertiesOpen(true)} onOpenOffer={setViewOfferId} placement="sidebar" />
             <PlayerDashboard roomId={roomId} />
           </aside>

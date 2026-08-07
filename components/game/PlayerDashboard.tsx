@@ -84,7 +84,9 @@ export default function PlayerDashboard({ roomId }: PlayerDashboardProps) {
                 // "Turn" pill competing with the name for the row's width. Border and
                 // glow share one colour so the edge reads as a single thick band; both
                 // draw outside the box, so switching turns never reflows the list.
-                className={`rounded-md border bg-white/40 backdrop-blur-sm overflow-x-hidden transition-[box-shadow,border-color] duration-300 ease-out ${
+                // The border width is constant so turning the marker on never shifts
+                // the row by a pixel; only the colour and the inset glow change.
+                className={`rounded-md border-2 bg-white/40 backdrop-blur-sm overflow-x-hidden transition-[box-shadow,border-color] duration-300 ease-out ${
                   isActive ? 'border-pine-bright shadow-turn' : 'border-salmon-line/40'
                 } ${player.isBankrupt ? 'opacity-50' : ''}`}
               >

@@ -88,7 +88,11 @@ export default function PropertyManager({ roomId, playerId, embedded = false, on
         ) : null}
       </div>
 
-      <div className="mt-4 grid gap-3">
+      {/* Embedded, this list hangs off a player card inside a rail that clips rather
+        * than scrolls, so a large portfolio ran off the bottom of the viewport and
+        * took the collapse control with it. Capped and scrolled in place, the card
+        * can always be closed. The modal form is already inside a scrollable shell. */}
+      <div className={`mt-4 grid gap-3 ${embedded ? 'max-h-[40vh] overflow-y-auto pr-1' : ''}`}>
         {ownedTiles.length === 0 ? <p className="text-sm text-zinc-700">No properties owned yet.</p> : null}
         {ownedTiles.map((tile) => {
           const property = properties[tile.id]
