@@ -27,9 +27,10 @@ export function groupLabel(colorGroup: string | undefined): string {
  *
  * A bare name ("Atlantic Avenue") forces the reader to recall which group it
  * belongs to, which is the one thing that decides whether a trade is worth taking.
- * So the group is carried three ways: the band on the left for a glance, the label
- * on the right for certainty, and the title/screen-reader text for anyone who
- * cannot use the colour at all. Colour is never the only channel.
+ * The band on the left answers that at a glance. The group name is not printed —
+ * it repeated what the colour already said and crowded the row — but it stays in
+ * the title and in screen-reader text, so the information is still reachable
+ * without sight of the colour.
  */
 export default function PropertyChip({
   propertyId,
@@ -57,9 +58,6 @@ export default function PropertyChip({
       <span className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
         <span className="min-w-0 flex-1 truncate font-semibold text-zinc-900">{name}</span>
         <span className="sr-only">{label} group</span>
-        <span aria-hidden className="flex-none text-[10px] font-bold uppercase tracking-wide text-zinc-500">
-          {label}
-        </span>
         {mortgaged ? (
           <span className="flex-none rounded bg-danger-surface px-1.5 py-0.5 text-[9px] font-bold uppercase text-danger">
             Mortgaged

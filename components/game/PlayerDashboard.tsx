@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import PropertyManager from '@/components/game/PropertyManager'
 import PropertyDetailModal from '@/components/game/PropertyDetailModal'
-import { calculatePlayerNetWorth, colorForGroup, formatMoney, playerIdFromConnection, resolveLocalPlayer, truncateUsername } from '@/components/game/helpers'
+import { colorForGroup, formatMoney, playerIdFromConnection, resolveLocalPlayer, truncateUsername } from '@/components/game/helpers'
 import { getTile } from '@/lib/game-engine/board'
 import { useCountdown } from '@/hooks/useCountdown'
 import { URGENT_THRESHOLD_SECONDS } from '@/lib/game-engine/timing'
@@ -74,53 +74,61 @@ export default function PlayerDashboard({ roomId }: PlayerDashboardProps) {
           {players.map((player, index) => {
             const isActive = index === currentPlayerIndex
             const isConnected = connectedIds.has(player.id) || connectedUsernames.has(player.username)
-            const netWorth = calculatePlayerNetWorth(player, properties)
+            const connectionLabel = isConnected ? 'Connected' : 'Away'
 
             return (
               <div
                 key={player.id}
                 aria-current={isActive ? 'true' : undefined}
-                className={`rounded-md border bg-white/40 backdrop-blur-sm transition overflow-x-hidden ${
-                  isActive ? 'border-pine shadow-[0_0_0_1px_rgba(47,77,32,.25)]' : 'border-salmon-line/40'
+                // Whose turn it is reads off the card's own outline rather than a
+                // "Turn" pill competing with the name for the row's width. Border and
+                // glow share one colour so the edge reads as a single thick band; both
+                // draw outside the box, so switching turns never reflows the list.
+                className={`rounded-md border bg-white/40 backdrop-blur-sm overflow-x-hidden transition-[box-shadow,border-color] duration-300 ease-out ${
+                  isActive ? 'border-pine-bright shadow-turn' : 'border-salmon-line/40'
                 } ${player.isBankrupt ? 'opacity-50' : ''}`}
               >
                 <button
                   onClick={() => setExpandedPlayerId((current) => (current === player.id ? null : player.id))}
                   className="w-full px-3 py-3 text-left overflow-x-hidden"
                 >
-                  <div className="flex items-start justify-between gap-2 min-w-0">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="inline-block h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ backgroundColor: player.color }} />
-                        <p
-                          title={player.username}
-                          className={`font-bold text-zinc-900 truncate ${player.isBankrupt ? 'line-through text-zinc-600' : ''}`}
-                        >
-                          {truncateUsername(player.username, 10)}
-                        </p>
-                        {isActive ? <span className="shrink-0 rounded-full bg-pine px-2 py-0.5 text-[10px] font-black uppercase text-felt">Turn</span> : null}
-                        {!isConnected && !player.isBankrupt ? (
-                          <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">Away</span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-700">
-                        <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${isConnected ? 'bg-success' : 'bg-amber-500'}`} />
-                        {isConnected ? 'Connected' : 'Away'}
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      {/* The seat colour and the connection state share one mark: the
+                        * disc is the seat, the ring around it is presence. It replaces
+                        * a "Connected" caption line and an "Away" pill that between
+                        * them said the same thing twice. */}
+                      <span
+                        title={connectionLabel}
+                        className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ring-2 ${
+                          isConnected ? 'ring-success' : 'ring-amber-500'
+                        }`}
+                        style={{ backgroundColor: player.color }}
+                      />
+                      <span className="sr-only">{connectionLabel}</span>
+                      <p
+                        title={player.username}
+                        className={`font-bold text-zinc-900 truncate ${player.isBankrupt ? 'line-through text-zinc-600' : ''}`}
+                      >
+                        {truncateUsername(player.username, 10)}
                       </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
                       {isActive && !player.isBankrupt && secondsLeft !== null ? (
-                        <p
-                          className={`mt-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide ${
-                            player.cash < 0 || secondsLeft <= URGENT_THRESHOLD_SECONDS ? 'text-danger' : 'text-pine/70'
+                        <span
+                          // Bare clock: it only ever appears on the active card, which
+                          // the outline already identifies, so a "Turn" label was noise.
+                          // Debt keeps its longer deadline and the DebtOverlay; here the
+                          // danger colour is the whole signal.
+                          aria-label={`${formatClock(secondsLeft)} left`}
+                          className={`text-xs font-extrabold tabular-nums ${
+                            player.cash < 0 || secondsLeft <= URGENT_THRESHOLD_SECONDS ? 'text-danger' : 'text-pine'
                           }`}
                         >
-                          <span aria-hidden>⏱</span>
-                          {player.cash < 0 ? 'Debt' : 'Turn'} · {formatClock(secondsLeft)}
-                        </p>
+                          {formatClock(secondsLeft)}
+                        </span>
                       ) : null}
-                    </div>
-                    <div className="text-right shrink-0">
                       <p className="font-black text-zinc-900">{formatMoney(player.cash)}</p>
-                      <p className="text-xs text-zinc-700">Worth {formatMoney(netWorth)}</p>
                     </div>
                   </div>
 

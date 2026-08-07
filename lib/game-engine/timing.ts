@@ -2,8 +2,8 @@
  * Every game clock, in one place.
  *
  * These were previously scattered as bare numbers across routes and components,
- * which is how the auction's on-screen "max" (30 s) and its anti-snipe extension
- * (10 s) drifted apart. Import from here rather than re-typing a literal.
+ * which is how the auction's on-screen "max" and its anti-snipe extension drifted
+ * apart. Import from here rather than re-typing a literal.
  *
  * All values are milliseconds unless the name says otherwise. Deadlines derived
  * from them are stamped with the SERVER's clock; clients compare against
@@ -17,7 +17,7 @@ export const TURN_TIMEOUT_MS = 25_000
 export const DEBT_TIMEOUT_MS = 80_000
 
 /** Length of an auction from the moment it opens. */
-export const AUCTION_DURATION_MS = 30_000
+export const AUCTION_DURATION_MS = 15_000
 
 /**
  * Anti-sniping. Only a bid landing inside this final window touches the clock,

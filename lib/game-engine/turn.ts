@@ -133,9 +133,15 @@ function defaultDice(): [number, number] {
 
 /**
  * After an auto-roll, if it is still the same player's turn (the landing didn't
- * already jail them or end the game), end it — an away player doesn't buy a
- * property or take a doubles re-roll. If auto-rolled rent left them insolvent
- * (they can't liquidate while away), declare bankruptcy so the game keeps moving.
+ * already jail them or end the game), close it out: an away player doesn't buy a
+ * property. If auto-rolled rent left them insolvent (they can't liquidate while
+ * away), declare bankruptcy so the game keeps moving.
+ *
+ * Doubles are the exception. They earn another roll, and being away does not
+ * forfeit that — `endTurn` re-arms the same seat with a fresh deadline, so the
+ * next timeout auto-rolls again instead of passing play on. This used to clear
+ * the flag first, which turned every auto-rolled double into a skipped turn.
+ * The loop is bounded: `applyRoll` jails on the third consecutive double.
  */
 function autoEndTurn(storage: JsonStorage, startIndex: number): void {
   if (storage.gamePhase === 'ended') return
@@ -151,8 +157,14 @@ function autoEndTurn(storage: JsonStorage, startIndex: number): void {
   }
 
   storage.gamePhase = 'playing'
-  storage.lastRollWasDoubles = false
-  storage.consecutiveDoubles = 0
+
+  // A player the landing just bankrupted has no turn left to re-roll into, so
+  // their doubles are dropped rather than handed to endTurn.
+  const keepsDoubles = Boolean(storage.lastRollWasDoubles) && !player.isBankrupt
+  if (!keepsDoubles) {
+    storage.lastRollWasDoubles = false
+    storage.consecutiveDoubles = 0
+  }
   endTurn(storage)
 }
 

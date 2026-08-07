@@ -12,7 +12,7 @@ describe('timing constants', () => {
   it('pins the player-facing durations', () => {
     expect(TURN_TIMEOUT_MS).toBe(25_000)
     expect(DEBT_TIMEOUT_MS).toBe(80_000)
-    expect(AUCTION_DURATION_MS).toBe(30_000)
+    expect(AUCTION_DURATION_MS).toBe(15_000)
     expect(AUCTION_EXTENSION_MS).toBe(5_000)
   })
 

@@ -10,6 +10,9 @@ const config: Config = {
           DEFAULT: '#2F4D20', // brand ink & primary actions
           soft: '#4A6B38',
           deep: '#1A472A',
+          // Bright enough to read as a glow on the salmon panel, which the ink
+          // greens cannot — they go muddy against it.
+          bright: '#6BC63F',
         },
         parchment: {
           DEFAULT: '#F7F0E4', // app background
@@ -55,6 +58,10 @@ const config: Config = {
       boxShadow: {
         card: '0 4px 12px rgba(47, 77, 32, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06)',
         overlay: '0 25px 50px -12px rgba(24, 24, 27, 0.35)',
+        // Active-turn marker. One solid band the same colour as the border it sits
+        // against, so the two merge into a single thick edge instead of reading as
+        // two concentric lines, plus a soft bloom to take the hard edge off it.
+        turn: '0 0 0 3px #6BC63F, 0 0 16px 3px rgba(107, 198, 63, 0.45)',
       },
     },
   },

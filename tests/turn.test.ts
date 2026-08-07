@@ -159,25 +159,66 @@ describe('enforceTurnTimeout', () => {
     expect(events.some((e) => e.type === 'DICE_ROLLED')).toBe(true)
   })
 
-  it('does not grant a doubles re-roll when auto-rolling', () => {
+  it('grants a doubles re-roll when auto-rolling, re-arming the same seat', () => {
     const p0 = makePlayer({ id: 'player-0', position: 0 })
     const storage = makeStorage({
       players: [p0, makePlayer({ id: 'player-1' })],
       turnDeadline: 1,
       hasRolled: false,
     })
-    enforceTurnTimeout(storage, [], fixedDice(3, 3)) // doubles
-    expect(storage.currentPlayerIndex).toBe(1) // still advances, no bonus roll
+    enforceTurnTimeout(storage, [], fixedDice(3, 3)) // doubles -> Oriental Avenue
+    expect(storage.currentPlayerIndex).toBe(0) // turn is NOT passed on
+    expect(storage.hasRolled).toBe(false) // ready to roll again
+    expect(storage.turnDeadline).toBeGreaterThan(Date.now()) // fresh window
   })
 
-  it('auto-passes a buy decision when the idle player rolls onto an unowned property', () => {
-    const p0 = makePlayer({ id: 'player-0', position: 1 }) // 1 + 2 -> Baltic (unowned)
+  it('still jails on the third consecutive auto-rolled double', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 0 })
     const storage = makeStorage({
       players: [p0, makePlayer({ id: 'player-1' })],
       turnDeadline: 1,
       hasRolled: false,
     })
-    enforceTurnTimeout(storage, [], fixedDice(1, 1))
+
+    // Each re-arm stamps a future deadline, so expire it again to trigger the next
+    // auto-roll — exactly what the client's timer does 25 s later.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      storage.turnDeadline = 1
+      enforceTurnTimeout(storage, [], fixedDice(3, 3))
+    }
+
+    expect(p0.inJail).toBe(true)
+    expect(storage.currentPlayerIndex).toBe(1) // jailing forfeits the rest of the turn
+  })
+
+  it('drops the doubles re-roll if the auto-rolled landing bankrupted the player', () => {
+    const props = makePropertyMap()
+    props.set('oriental-avenue', makeProperty('oriental-avenue', { ownerId: 'player-1' })) // index 6
+    const broke = makePlayer({ id: 'player-0', position: 0, cash: 1 })
+    const owner = makePlayer({ id: 'player-1', properties: ['oriental-avenue'] })
+    // Three seats, so bankrupting one leaves a game to carry on with — with two the
+    // win check fires first and the turn index never moves, proving nothing.
+    const storage = makeStorage({
+      players: [broke, owner, makePlayer({ id: 'player-2' })],
+      turnDeadline: 1,
+      hasRolled: false,
+      properties: Object.fromEntries(props),
+    })
+    enforceTurnTimeout(storage, [], fixedDice(3, 3)) // doubles onto rent they cannot pay
+    expect(broke.isBankrupt).toBe(true)
+    expect(storage.currentPlayerIndex).not.toBe(0) // no re-roll for a bankrupt seat
+  })
+
+  it('auto-passes a buy decision when the idle player rolls onto an unowned property', () => {
+    const p0 = makePlayer({ id: 'player-0', position: 0 }) // 0 + 3 -> Baltic (unowned)
+    const storage = makeStorage({
+      players: [p0, makePlayer({ id: 'player-1' })],
+      turnDeadline: 1,
+      hasRolled: false,
+    })
+    // Deliberately not doubles: those now re-arm the same seat, which would leave
+    // this asserting the doubles path rather than the pass-the-buy one.
+    enforceTurnTimeout(storage, [], fixedDice(1, 2))
     expect(storage.properties['baltic-avenue'].ownerId).toBeNull() // did not buy
     expect(storage.currentPlayerIndex).toBe(1)
   })
