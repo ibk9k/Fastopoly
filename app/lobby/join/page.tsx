@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { getStoredUsername } from '@/lib/game-client/tokens'
+import BackButton from '@/components/ui/BackButton'
 
 type PublicRoom = {
   id: string
@@ -83,8 +84,9 @@ export default function JoinLobbyPage() {
   return (
     <main className="min-h-screen bg-[#F7F0E4] px-6 py-10 text-zinc-900 font-sans">
       <div className="mx-auto max-w-6xl">
-        <h1 className="text-4xl font-black uppercase text-[#2f4d20] tracking-wide">Join a game</h1>
-        
+        <BackButton href="/" />
+        <h1 className="mt-4 text-4xl font-black uppercase text-[#2f4d20] tracking-wide">Join a game</h1>
+
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           {/* Party Code Panel */}
           <section className="rounded-lg border border-[#e58a74]/40 bg-[#EFA38F] p-6 shadow-xl">
@@ -126,22 +128,41 @@ export default function JoinLobbyPage() {
                   ))
                 : null}
               {!loadingRooms &&
-                rooms.map((room) => (
-                <div key={room.id} className="flex items-center justify-between gap-4 rounded-lg border border-[#e58a74]/30 bg-white/20 px-4 py-3 shadow-sm">
-                  <div>
-                    <p className="font-black text-zinc-900 text-sm capitalize">{room.host_username}</p>
-                    <p className="text-[11px] font-bold text-zinc-700 uppercase tracking-wide mt-0.5">
-                      {room.map_type} · {room.player_count} / {room.max_players} players
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => router.push(`/game/${room.id}`)}
-                    className="rounded-md border border-[#2f4d20]/30 bg-white/40 hover:bg-white/60 px-4 py-2 text-xs font-black text-[#2f4d20] transition-all active:scale-95"
-                  >
-                    Join
-                  </button>
-                </div>
-              ))}
+                rooms.map((room) => {
+                  // Greyed out rather than letting the click through to a rejection.
+                  // The server still enforces the cap (/api/lobby/validate), because
+                  // this figure refreshes on a heartbeat and can be a few seconds
+                  // behind — this is the affordance, not the guarantee.
+                  const isFull = room.player_count >= room.max_players
+                  return (
+                    <div
+                      key={room.id}
+                      className={`flex items-center justify-between gap-4 rounded-lg border border-[#e58a74]/30 px-4 py-3 shadow-sm transition-opacity ${
+                        isFull ? 'bg-white/10 opacity-60' : 'bg-white/20'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-black text-zinc-900 text-sm capitalize">{room.host_username}</p>
+                        <p className="text-[11px] font-bold text-zinc-700 uppercase tracking-wide mt-0.5">
+                          {room.map_type} · {room.player_count} / {room.max_players} players
+                          {isFull ? ' · full' : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => router.push(`/game/${room.id}`)}
+                        disabled={isFull}
+                        title={isFull ? 'This room is full' : undefined}
+                        className={`rounded-md border px-4 py-2 text-xs font-black transition-all ${
+                          isFull
+                            ? 'cursor-not-allowed border-zinc-400/30 bg-zinc-300/30 text-zinc-500'
+                            : 'border-[#2f4d20]/30 bg-white/40 text-[#2f4d20] hover:bg-white/60 active:scale-95'
+                        }`}
+                      >
+                        {isFull ? 'Full' : 'Join'}
+                      </button>
+                    </div>
+                  )
+                })}
               {!loadingRooms && rooms.length === 0 ? (
                 <p className="rounded-lg border border-[#e58a74]/30 bg-white/10 px-4 py-6 text-center text-xs font-bold text-zinc-700">
                   No public games waiting.

@@ -56,6 +56,14 @@ export type GamePhase =
   | 'trade'
   | 'ended'
 
+/**
+ * `countered` is terminal like accepted/rejected: editing an offer closes it and
+ * opens a fresh one pointing back at it, so a negotiation is a chain of offers
+ * rather than one mutable record. That keeps the accept path validating exactly
+ * the terms the accepting player was shown.
+ */
+export type TradeStatus = 'pending' | 'accepted' | 'rejected' | 'countered' | 'cancelled'
+
 export type TradeOffer = {
   id: string
   fromPlayerId: string
@@ -67,7 +75,10 @@ export type TradeOffer = {
   /** Get Out of Jail Free cards included by each side. */
   offeredJailCards?: number
   requestedJailCards?: number
-  status: 'pending' | 'accepted' | 'rejected'
+  status: TradeStatus
+  createdAt?: number
+  /** The offer this one counters, if any — the link that forms the chain. */
+  counterOfId?: string | null
 }
 
 export type GameLogEntry = {
@@ -108,6 +119,18 @@ type Presence = {
   isReady: boolean
 }
 
+export type ChatMessage = {
+  id: string
+  /** Supabase auth uid — the durable identity. Seat ids change every reconnect. */
+  authorId: string
+  /** Display name captured at send time, so history survives a rename. */
+  username: string
+  /** Seat colour when the author held a seat, for the same reason. */
+  color?: string
+  text: string
+  timestamp: number
+}
+
 export type Storage = {
   gamePhase: GamePhase
   currentPlayerIndex: number
@@ -116,8 +139,14 @@ export type Storage = {
   freeParkingPool: number
   chanceIndex: number
   communityChestIndex: number
+  /** @deprecated Single-offer slot, replaced by `tradeOffers`. Kept so documents
+   * seeded before the change still normalize. */
   tradeOffer: TradeOffer | null
+  /** Every offer in the room, newest last. Terminal ones are pruned on write. */
+  tradeOffers?: TradeOffer[]
   log: LiveList<GameLogEntry>
+  /** Player chat. Optional so rooms seeded before chat existed still load. */
+  messages?: ChatMessage[]
   rules: GameRules
   mapType: string
   winnerIds: string[]

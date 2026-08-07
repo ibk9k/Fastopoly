@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { GameRules } from '@/lib/liveblocks.config'
 import { setStoredHostToken } from '@/lib/game-client/tokens'
+import BackButton from '@/components/ui/BackButton'
 import Button from '@/components/ui/Button'
 import PropertyStrip from '@/components/ui/PropertyStrip'
 
@@ -74,7 +75,8 @@ export default function HostLobbyPage() {
     <main className="relative min-h-screen bg-parchment px-6 py-12 text-pine">
       <PropertyStrip position="top" />
       <div className="mx-auto max-w-4xl">
-        <h1 className="font-display text-4xl uppercase tracking-wide text-pine">Host a game</h1>
+        <BackButton href="/" />
+        <h1 className="mt-4 font-display text-4xl uppercase tracking-wide text-pine">Host a game</h1>
 
         <section className="mt-8">
           <h2 className="text-sm font-extrabold uppercase tracking-widest text-pine/70">Map</h2>

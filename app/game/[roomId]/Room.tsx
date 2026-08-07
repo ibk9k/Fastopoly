@@ -1,6 +1,7 @@
 'use client'
 
 import { LiveList } from '@liveblocks/client'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GameRules } from '@/lib/liveblocks.config'
 import { RoomProvider } from '@/lib/liveblocks.config'
@@ -15,12 +16,9 @@ function TurnPresenceSync() {
 const DEFAULT_RULES: GameRules = { startingCash: 1500, freeParkingJackpot: false, auctionOnPass: true, speedDie: false, maxPlayers: 4 }
 
 export default function Room({ roomId, children }: { roomId: string; children: React.ReactNode }) {
-  const { user, profile, ready, signInAsGuest } = useAuth()
+  const router = useRouter()
+  const { user, profile, ready } = useAuth()
   const [username, setUsername] = useState<string | null>(null)
-  const [needsName, setNeedsName] = useState(false)
-  const [inputName, setInputName] = useState('')
-  const [joining, setJoining] = useState(false)
-  const [joinError, setJoinError] = useState<string | null>(null)
 
   const [validating, setValidating] = useState(true)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -62,7 +60,6 @@ export default function Room({ roomId, children }: { roomId: string; children: R
           return false
         }
         setUsername(targetUsername)
-        setNeedsName(false)
         setValidating(false)
         hasValidatedRef.current = true
         return true
@@ -90,33 +87,22 @@ export default function Room({ roomId, children }: { roomId: string; children: R
       void validateAndSetUsername(profile.username)
       return
     }
+
+    // No session: sign-in lives on the cover page, so there is nothing to do here.
+    if (!user) {
+      router.replace('/')
+      return
+    }
+
+    // Signed in but the profile never loaded — the auth backend is unreachable.
+    // Fall through to the error card rather than stranding the player on a spinner.
     setValidating(false)
-    setNeedsName(true)
-  }, [ready, user, profile?.username, username, validateAndSetUsername])
+  }, [ready, user, profile?.username, username, validateAndSetUsername, router])
 
-  const handleConfirmName = useCallback(async () => {
-    const trimmed = inputName.trim()
-    if (!trimmed) return
-    setJoining(true)
-    setJoinError(null)
+  // Derived, not stored: if the profile lands late the effect above picks it up.
+  const profileUnavailable = ready && !!user && !profile?.username && !username
 
-    const isValid = await validateAndSetUsername(trimmed)
-    if (!isValid) {
-      setJoining(false)
-      return
-    }
-
-    const { error } = await signInAsGuest(trimmed)
-    setJoining(false)
-    if (error) {
-      setJoinError(error)
-      return
-    }
-    sessionStorage.setItem('fastopoly_username', trimmed)
-    localStorage.setItem('fastopoly_username', trimmed)
-  }, [inputName, signInAsGuest, validateAndSetUsername])
-
-  if (validationError) {
+  if (validationError || profileUnavailable) {
     return (
       <div className="min-h-screen bg-[#F7F0E4] p-8 text-zinc-900 flex items-center justify-center font-sans">
         <div className="w-full max-w-md rounded-2xl border-[3px] border-danger/60 bg-white p-6 shadow-2xl text-center">
@@ -124,7 +110,9 @@ export default function Room({ roomId, children }: { roomId: string; children: R
             !
           </div>
           <h2 className="text-2xl font-black tracking-wider text-zinc-900 uppercase">Cannot Join Game</h2>
-          <p className="mt-3 text-sm font-bold text-zinc-700 leading-relaxed">{validationError}</p>
+          <p className="mt-3 text-sm font-bold text-zinc-700 leading-relaxed">
+            {validationError ?? 'We could not load your player profile. The service may be temporarily unavailable — try again in a moment.'}
+          </p>
           <div className="mt-6 flex flex-col gap-2.5">
             <a
               href="/lobby/join"
@@ -139,37 +127,6 @@ export default function Room({ roomId, children }: { roomId: string; children: R
               Back to Home
             </a>
           </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (needsName) {
-    return (
-      <div className="min-h-screen bg-[#F7F0E4] p-8 text-zinc-900 flex items-center justify-center font-sans">
-        <div className="w-full max-w-sm rounded-2xl border-[3px] border-[#2f4d20] bg-[#BAED91] p-6 shadow-2xl text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/Logo.png" alt="Fastopoly" width={951} height={393} className="mx-auto h-auto w-56 max-w-full" />
-          <p className="mt-3 text-sm font-bold text-[#2f4d20]/80">Enter a username to join the game room.</p>
-          <input
-            value={inputName}
-            onChange={(e) => setInputName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleConfirmName()
-            }}
-            className="mt-6 w-full rounded-lg border-2 border-[#2f4d20]/45 bg-[#fcfaf2] px-4 py-3 text-zinc-900 font-bold placeholder-zinc-400 outline-none focus:border-[#2f4d20]"
-            placeholder="Username"
-            maxLength={15}
-            autoFocus
-          />
-          {joinError ? <p className="mt-3 text-sm font-bold text-danger">{joinError}</p> : null}
-          <button
-            onClick={() => void handleConfirmName()}
-            disabled={joining}
-            className="mt-4 w-full rounded-lg bg-[#2f4d20] px-4 py-3 font-black text-[#BAED91] hover:bg-[#2f4d20]/90 transition-transform active:scale-[0.98] disabled:opacity-50"
-          >
-            {joining ? 'Joining…' : 'Join Game'}
-          </button>
         </div>
       </div>
     )

@@ -1,6 +1,7 @@
 import type { JsonStorage, Player } from '@/lib/liveblocks.config'
 import { getTile } from './board'
 import { addLog } from './server-state'
+import { cancelOffersInvolving } from './trades'
 
 /**
  * Executes a bankruptcy per the actual Monopoly rules:
@@ -17,6 +18,11 @@ import { addLog } from './server-state'
  */
 export function executeBankruptcy(storage: JsonStorage, debtor: Player, creditorId: string | 'bank'): void {
   const creditor = creditorId === 'bank' ? null : storage.players.find((p) => p.id === creditorId) ?? null
+
+  // A pending offer to or from a bankrupt player can never be settled — its assets
+  // are about to change hands — so it is closed here rather than left sitting in
+  // everyone's Active Trades list forever.
+  storage.tradeOffers = cancelOffersInvolving(storage.tradeOffers ?? [], debtor.id)
 
   let buildingProceeds = 0
   debtor.properties.forEach((propertyId) => {

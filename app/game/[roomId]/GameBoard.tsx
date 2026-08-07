@@ -7,11 +7,11 @@ import AuctionPanel from '@/components/game/AuctionPanel'
 import BankruptcyOverlay from '@/components/game/BankruptcyOverlay'
 import Board from '@/components/game/Board'
 import ConnectionBanner from '@/components/game/ConnectionBanner'
-import GameLog from '@/components/game/GameLog'
+import SidePanel from '@/components/game/SidePanel'
 import PlayerDashboard from '@/components/game/PlayerDashboard'
 import PropertyManager from '@/components/game/PropertyManager'
 import GameSounds from '@/components/game/GameSounds'
-import SoundToggle from '@/components/game/SoundToggle'
+import GameNav from '@/components/game/GameNav'
 import TradeOfferModal from '@/components/game/TradeOfferModal'
 import TradePanel from '@/components/game/TradePanel'
 import TurnTimer from '@/components/game/TurnTimer'
@@ -23,7 +23,7 @@ import { useToast } from '@/components/ui/Toast'
 import { resolveLocalPlayer, postJson } from '@/components/game/helpers'
 import { ensurePlayerToken, getStoredHostToken } from '@/lib/game-client/tokens'
 import { useSelf, useStorage, useOthers, useUpdateMyPresence } from '@/lib/liveblocks.config'
-import type { GameRules, Player } from '@/lib/liveblocks.config'
+import type { GameRules, Player, TradeOffer } from '@/lib/liveblocks.config'
 import { supabase } from '@/lib/supabase/client'
 
 const seatColors = ['#EF4444', '#3B82F6', '#FACC15', '#22C55E']
@@ -50,6 +50,21 @@ export default function GameBoard() {
   const selfPlayer = resolveLocalPlayer(storedPlayers, self, activePlayer?.id)
 
   const [tradeOpen, setTradeOpen] = useState(false)
+  // Set when composing a counter, so TradePanel opens pre-filled with the mirror of
+  // the offer being answered instead of a blank form.
+  const [counterOf, setCounterOf] = useState<TradeOffer | null>(null)
+  const [viewOfferId, setViewOfferId] = useState<string | null>(null)
+
+  function openCounter(offer: TradeOffer) {
+    setViewOfferId(null)
+    setCounterOf(offer)
+    setTradeOpen(true)
+  }
+
+  function closeTradePanel() {
+    setTradeOpen(false)
+    setCounterOf(null)
+  }
   const [propertiesOpen, setPropertiesOpen] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('players')
   const [isPublic, setIsPublic] = useState(true)
@@ -67,7 +82,11 @@ export default function GameBoard() {
     void ensurePlayerToken(roomId, selfPlayerId, selfUsername)
   }, [isLobby, selfPlayerId, selfUsername, roomId])
 
-  // Heartbeat loop: ping room activity every 40 seconds to keep active rooms alive
+  // Heartbeat loop: ping room activity every 40 seconds to keep active rooms alive.
+  // The ping also refreshes the occupancy the public games list shows, so it is
+  // re-fired whenever the lobby population changes — otherwise "1 / 4 players"
+  // could sit stale for most of a minute while people are actually arriving.
+  const lobbyPopulation = isLobby ? others.length + 1 : 0
   useEffect(() => {
     if (!roomId) return
     const pingHeartbeat = () => {
@@ -76,7 +95,7 @@ export default function GameBoard() {
     pingHeartbeat()
     const timer = setInterval(pingHeartbeat, 40000)
     return () => clearInterval(timer)
-  }, [roomId])
+  }, [roomId, lobbyPopulation])
 
   // Sync isPublic status and host_username from Supabase
   useEffect(() => {
@@ -212,50 +231,57 @@ export default function GameBoard() {
   }
 
   return (
-    <main className="game-root bg-parchment px-4 pt-4 text-zinc-900 lg:h-screen lg:overflow-hidden lg:px-6 lg:pt-6">
+    <main className="game-root bg-parchment px-4 pt-4 text-zinc-900 xl:h-screen xl:overflow-hidden xl:px-6 xl:pt-6">
       <ConnectionBanner />
       <BankruptcyOverlay />
       <GameSounds isMyTurn={Boolean(selfPlayer?.id) && activePlayer?.id === selfPlayer?.id} />
-      <SoundToggle className="fixed right-3 top-3 z-panel shadow-card !bg-parchment-raised" />
 
+      {/* Three columns from 1280px up. The centre track is `minmax(0, auto)` so it is
+        * sized by the board; the rails are `minmax(240px, 1fr)` so they absorb the
+        * slack on wide screens and stop shrinking at a usable width on narrow ones.
+        * Below 1280 the whole thing stacks — three columns cannot hold a square board
+        * at that width without making the board the thing that gives way. */}
       <div
-        className={`relative mx-auto flex h-auto max-w-[1400px] flex-col justify-center gap-5 lg:h-full lg:flex-row ${
-          isLobby ? 'lg:items-center' : 'lg:items-stretch'
-        }`}
+        className="relative mx-auto flex h-auto max-w-[1800px] flex-col justify-center gap-5 xl:grid xl:h-full xl:items-center xl:[grid-template-columns:minmax(240px,1fr)_minmax(0,auto)_minmax(240px,1fr)]"
       >
-        {/* Left rail: lobby settings (desktop only, lobby phase only) */}
-        <aside
-          className={`hidden lg:flex flex-col overflow-hidden pb-4 transition-all duration-500 ease-in-out ${
-            isLobby ? 'w-[300px] opacity-100 mr-2' : 'pointer-events-none w-0 opacity-0'
-          }`}
-        >
-          <div className="max-h-[85vh] w-[300px] overflow-y-auto">
-            <LobbySettings {...lobbySettingsProps} />
-          </div>
+        {/* Left rail (desktop): a persistent panel stack. It used to collapse to zero
+          * width once the game started; it now always holds the nav, so the controls
+          * are never a floating overlay on top of the board. Chat goes below. */}
+        <aside className="hidden min-w-0 flex-col gap-4 self-center overflow-hidden pb-4 xl:flex">
+          <GameNav isLobby={isLobby} />
+          {isLobby ? (
+            <div className="max-h-[45vh] overflow-y-auto">
+              <LobbySettings {...lobbySettingsProps} />
+            </div>
+          ) : null}
+          <SidePanel roomId={roomId} className="h-[26rem] flex-none" />
         </aside>
 
-        {/* Center: the board */}
-        <section className="flex w-full min-w-0 flex-col items-center justify-center pb-4 lg:w-auto lg:flex-1 lg:self-center">
+        {/* Center: the board. On phones the nav sits directly above it — the controls
+          * used to be a fixed overlay pinned over the board's corner tiles. */}
+        <section className="flex w-full min-w-0 flex-col items-center justify-center pb-4 xl:w-auto xl:self-center">
+          <GameNav isLobby={isLobby} className="mb-3 xl:hidden" />
           <Board />
         </section>
 
         {/* Right rail (desktop) */}
         {isLobby ? (
-          <aside className="hidden w-[360px] flex-shrink-0 self-center lg:block">
+          <aside className="hidden min-w-0 self-center xl:block">
             <div className="max-h-[85vh] overflow-y-auto">
               <PlayerList {...playerListProps} />
             </div>
           </aside>
         ) : (
-          <aside className="hidden h-full w-[360px] flex-shrink-0 flex-col gap-4 overflow-hidden pb-4 lg:flex">
-            <ActionPanel roomId={roomId} onOpenTrade={() => setTradeOpen(true)} onOpenProperties={() => setPropertiesOpen(true)} placement="sidebar" />
+          <aside className="hidden min-w-0 flex-col gap-4 self-center overflow-hidden pb-4 xl:flex">
+            {/* The log moved to the left rail's Comments/Logs panel; this rail is
+              * Actions (and, next, Active Trades) plus Players. */}
+            <ActionPanel roomId={roomId} onOpenTrade={() => setTradeOpen(true)} onOpenProperties={() => setPropertiesOpen(true)} onOpenOffer={setViewOfferId} placement="sidebar" />
             <PlayerDashboard roomId={roomId} />
-            <GameLog />
           </aside>
         )}
 
         {/* Mobile: tabbed panel below the board */}
-        <section className="w-full lg:hidden">
+        <section className="w-full xl:hidden">
           {/* During play a fixed ActionPanel overlays the bottom of the screen, so the
             * tail of this panel needs clearance or it can never be scrolled into view. */}
           <div
@@ -287,8 +313,12 @@ export default function GameBoard() {
             ) : mobilePanel === 'players' ? (
               <PlayerDashboard roomId={roomId} />
             ) : (
-              <GameLog />
+              <SidePanel roomId={roomId} className="h-[24rem] flex-none" />
             )}
+
+            {/* Chat is worth reaching in the lobby too — it is where people agree on
+              * rules before anyone starts. */}
+            {isLobby ? <SidePanel roomId={roomId} className="h-[24rem] flex-none" /> : null}
           </div>
         </section>
       </div>
@@ -304,9 +334,17 @@ export default function GameBoard() {
 
       {/* Single mounts for room-wide overlays */}
       {gamePhase === 'auction' && auctionPropertyId ? <AuctionPanel roomId={roomId} onClose={() => undefined} /> : null}
-      <TradeOfferModal roomId={roomId} />
+      <TradeOfferModal roomId={roomId} onCounter={openCounter} viewOfferId={viewOfferId} onCloseView={() => setViewOfferId(null)} />
 
-      {tradeOpen ? <TradePanel roomId={roomId} onClose={() => setTradeOpen(false)} /> : null}
+      {tradeOpen ? (
+        <TradePanel
+          // Remount per counter target so the pre-filled initial state is re-read.
+          key={counterOf?.id ?? 'new'}
+          roomId={roomId}
+          counterOf={counterOf}
+          onClose={closeTradePanel}
+        />
+      ) : null}
       {propertiesOpen ? (
         <Modal title="Manage properties" onClose={() => setPropertiesOpen(false)} width="max-w-3xl" hideHeader>
           <PropertyManager roomId={roomId} playerId={selfPlayer?.id ?? ''} onClose={() => setPropertiesOpen(false)} />

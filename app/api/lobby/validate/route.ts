@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanupInactiveRooms, findActiveUserRoom, INACTIVITY_THRESHOLD_MS, touchRoomActivity } from '@/lib/game-engine/room-cleanup'
-import { readGameStorage } from '@/lib/game-engine/server-state'
+import { listActiveUserIds, readGameStorage } from '@/lib/game-engine/server-state'
 import { getRequestUser, supabaseAdmin } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
@@ -16,9 +16,14 @@ export async function POST(req: NextRequest) {
     const cutoffTime = new Date(Date.now() - INACTIVITY_THRESHOLD_MS).toISOString()
     const { data, error } = await supabaseAdmin
       .from('public_rooms')
-      .select('id, status')
+      .select('id, status, max_players')
       .eq('id', roomCode)
-      .in('status', ['waiting', 'playing'])
+      // 'private' belongs here: it is a lobby that simply isn't advertised in the
+      // public list. Omitting it made a room unjoinable the moment the host flipped
+      // the visibility toggle — players who reloaded were told the room did not
+      // exist, and they could not start a fresh game either, because
+      // findActiveUserRoom does count 'private' and kept them "already in a game".
+      .in('status', ['waiting', 'playing', 'private'])
       .gte('last_active_at', cutoffTime)
       .maybeSingle()
 
@@ -31,6 +36,9 @@ export async function POST(req: NextRequest) {
     }
 
     const storage = await readGameStorage(roomCode).catch(() => null)
+    // A private room is still a lobby; only 'playing' means the game has begun.
+    // Every pre-game check below keys on this rather than on 'waiting' alone.
+    const isOpenLobby = data.status === 'waiting' || data.status === 'private'
 
     if (username) {
       const normalized = username.trim().toLowerCase()
@@ -64,9 +72,35 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Capacity. Nothing enforced this before: `maxPlayers` was a rule the lobby
+      // displayed and the room ignored, so a 2-player game could be joined by a
+      // third. It cannot be counted from `storage.players`, which stays empty until
+      // `init` freezes the seats — lobby occupancy lives in Liveblocks presence.
+      //
+      // Counts everyone EXCEPT the caller. In the lobby `isAlreadySeated` is always
+      // false (there are no seats yet), so without this a player who reloads their
+      // own full lobby would be told the room is full and locked out of their own
+      // game — their previous connection lingers for a moment after the reload.
+      //
+      // Fails open: if presence is unavailable, let the join through rather than
+      // sealing every room over an API hiccup. `init` is the real backstop.
+      if (isOpenLobby && !isAlreadySeated) {
+        const capacity = storage?.rules?.maxPlayers ?? data.max_players ?? null
+        const activeIds = await listActiveUserIds(roomCode)
+        const others = myUid
+          ? activeIds?.filter((id) => id !== `user-${myUid}`)
+          : activeIds
+        if (typeof capacity === 'number' && others && others.length >= capacity) {
+          return NextResponse.json(
+            { valid: false, error: `This room is full (${others.length}/${capacity} players).` },
+            { status: 400 },
+          )
+        }
+      }
+
       // Two players in one room may not share a display name — the board and log
       // would be unreadable. Compares against every seat that isn't the caller's.
-      if (data.status === 'waiting' && !isAlreadySeated) {
+      if (isOpenLobby && !isAlreadySeated) {
         const nameTakenByOther = players.some(
           (p) => p !== mySeat && p.username.trim().toLowerCase() === normalized,
         )

@@ -16,6 +16,7 @@ type LiveblocksStorageClient = {
   deleteRoom?: (roomId: string) => Promise<unknown>
   mutateStorage: (roomId: string, callback: (context: { root: StorageRoot }) => void | Promise<void>) => Promise<void>
   broadcastEvent?: (roomId: string, event: unknown) => Promise<void>
+  getActiveUsers?: (roomId: string) => Promise<{ data?: unknown[] }>
 }
 
 let liveblocksServer: LiveblocksStorageClient | null = null
@@ -29,6 +30,39 @@ export function getLiveblocksServer(): LiveblocksStorageClient {
   }) as unknown as LiveblocksStorageClient
 
   return liveblocksServer
+}
+
+/**
+ * Who is currently connected to a room, as distinct Liveblocks user ids
+ * (`user-<authUid>`, assigned server-side in the auth route).
+ *
+ * Read from the presence layer rather than accepted from the client: lobby
+ * occupancy is public-facing and gates joining, so a client-supplied number would
+ * be meaningless. Returns null when unavailable, so callers can leave a stored
+ * value alone or fail open rather than acting on a wrong count.
+ *
+ * De-duplicated by user: one person with the game open in two tabs is one player,
+ * not two — counting connections would let them fill their own lobby.
+ */
+export async function listActiveUserIds(roomId: string): Promise<string[] | null> {
+  const server = getLiveblocksServer()
+  if (!server.getActiveUsers) return null
+  try {
+    const result = await server.getActiveUsers(liveblocksRoomId(roomId))
+    if (!Array.isArray(result?.data)) return null
+    const ids = result.data
+      .map((user) => (user as { id?: unknown } | null)?.id)
+      .filter((id): id is string => typeof id === 'string')
+    return [...new Set(ids)]
+  } catch {
+    return null
+  }
+}
+
+/** Distinct connected users, or null when Liveblocks could not be reached. */
+export async function countActiveUsers(roomId: string): Promise<number | null> {
+  const ids = await listActiveUserIds(roomId)
+  return ids ? ids.length : null
 }
 
 export function liveblocksRoomId(roomId: string): string {

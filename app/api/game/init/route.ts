@@ -24,6 +24,19 @@ export async function POST(req: NextRequest) {
       throw new Error('Game has already started')
     }
 
+    // Capacity backstop. `/api/lobby/validate` turns joiners away at a full lobby,
+    // but that check reads Liveblocks presence, which is eventually consistent —
+    // two people validating at once can both pass. This is the point where seats
+    // become permanent, so it is the last place the cap can actually be enforced.
+    // It rejects rather than truncating: silently dropping someone who is sitting
+    // in the lobby watching the countdown is worse than telling the host why.
+    const capacity = body.rules.maxPlayers
+    if (typeof capacity === 'number' && body.players.length > capacity) {
+      throw new Error(
+        `This room seats ${capacity}, but ${body.players.length} players are in the lobby.`,
+      )
+    }
+
     const storage = emptyStorage(body.rules, body.mapType ?? 'classic')
     storage.gamePhase = 'playing'
     storage.players = body.players.map((player) => ({

@@ -7,15 +7,18 @@ import { BOARD } from '@/lib/game-engine/board'
 import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import { formatMoney, resolveLocalPlayer } from '@/components/game/helpers'
 import { useGameActions } from '@/hooks/useGameActions'
+import ActiveTrades from '@/components/game/ActiveTrades'
 
 type ActionPanelProps = {
   roomId: string
   onOpenTrade: () => void
   onOpenProperties: () => void
+  /** Opens a specific pending offer in the trade modal. */
+  onOpenOffer?: (offerId: string) => void
   placement?: 'sidebar' | 'mobile'
 }
 
-export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, placement = 'mobile' }: ActionPanelProps) {
+export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, onOpenOffer, placement = 'mobile' }: ActionPanelProps) {
   const self = useSelf()
   const players = useStorage((root) => root.players) ?? []
   const currentPlayerIndex = useStorage((root) => root.currentPlayerIndex) ?? 0
@@ -38,7 +41,11 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, pla
     return { propertyId: tile.id, name: tile.name, price: tile.price ?? 0 }
   }, [gamePhase, activePlayer, properties])
 
-  const wrapperClass = placement === 'sidebar' ? 'hidden lg:block' : 'lg:hidden'
+  // Must track the layout breakpoint in GameBoard (xl), not lg: while these were
+  // out of step, viewports between 1024 and 1279 showed neither variant — the
+  // sidebar copy sat inside an aside that is hidden until xl, and the mobile copy
+  // had already hidden itself at lg.
+  const wrapperClass = placement === 'sidebar' ? 'hidden xl:block' : 'xl:hidden'
   const panelClass =
     placement === 'sidebar'
       ? 'relative rounded-lg border border-salmon-line/60 bg-salmon px-4 py-4 text-zinc-900 shadow-card min-h-[180px]'
@@ -111,6 +118,10 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, pla
             </Button>
           ) : null}
         </div>
+
+        {/* Trades live inside this panel, under a divider, rather than in a card of
+          * their own — two panels stacked in the rail was what started clipping. */}
+        {placement === 'sidebar' && onOpenOffer ? <ActiveTrades onOpenOffer={onOpenOffer} /> : null}
 
         {pendingBuy ? <p className="mt-3 text-sm font-semibold text-zinc-800">{pendingBuy.name} is available.</p> : null}
         {/* The debt warning is surfaced as a center-screen DebtOverlay (mounted in GameBoard). */}

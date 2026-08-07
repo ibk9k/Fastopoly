@@ -53,8 +53,11 @@ export async function POST(req: NextRequest) {
         host_user_id: user.id,
         map_type: body.mapType,
         player_count: 1,
-        max_players: body.rules.maxPlayers ?? 4,
-        rules: body.rules,
+        // Both from the merged `rules` above, not the raw body: `body.rules` is
+        // optional everywhere else in this handler, and the defaults belong in the
+        // advertised row as much as in storage.
+        max_players: rules.maxPlayers,
+        rules,
         status: body.isPublic ? 'waiting' : 'private',
         last_active_at: new Date().toISOString(),
       }),

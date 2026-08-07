@@ -5,11 +5,23 @@ import { getTile } from '@/lib/game-engine/board'
 import { AuthError, authenticatePlayer, readPlayerToken } from '@/lib/game-engine/auth'
 import { badRequest, routeError } from '@/lib/game-engine/route-utils'
 import { addLog, broadcastRoomEvent, mutateGameStorage, propertyMap, toPropertyRecord } from '@/lib/game-engine/server-state'
+import { nanoid } from 'nanoid'
+import {
+  MAX_PENDING_OFFERS_PER_PLAYER,
+  appendOffer,
+  canOfferCash,
+  countPendingFrom,
+  findOffer,
+  offersOf,
+  setStatus,
+} from '@/lib/game-engine/trades'
 
 type TradeBody = {
   roomId?: string
   playerId?: string
-  action?: 'propose' | 'respond'
+  action?: 'propose' | 'respond' | 'counter' | 'cancel'
+  /** Which offer 'respond', 'counter' and 'cancel' address. */
+  offerId?: string
   offer?: TradeOffer
   accept?: boolean
 }
@@ -56,11 +68,14 @@ function validateTradeProposal(storage: JsonStorage, offer: TradeOffer): void {
     throw new TradeValidationError('Properties with houses or hotels cannot be traded')
   }
 
-  if (offer.offeredCash > fromPlayer.cash) {
+  // Clamped at zero: a player in debt holds negative cash, and comparing against it
+  // directly rejected even a $0 offer, barring the player who most needs to trade
+  // from trading at all.
+  if (!canOfferCash(fromPlayer.cash, offer.offeredCash)) {
     throw new TradeValidationError('Offered cash exceeds proposing player cash')
   }
 
-  if (offer.requestedCash > toPlayer.cash) {
+  if (!canOfferCash(toPlayer.cash, offer.requestedCash)) {
     throw new TradeValidationError('Requested cash exceeds target player cash')
   }
 
@@ -86,27 +101,80 @@ export async function POST(req: NextRequest) {
     await mutateGameStorage(roomId, (storage) => {
       const caller = authenticatePlayer(storage, roomId, body.playerId, token)
 
-      if (body.action === 'propose') {
+      const offers = offersOf(storage)
+
+      // Propose and counter both create an offer; a counter additionally closes the
+      // one it answers. Neither touches gamePhase — with several trades in flight a
+      // pending offer cannot be allowed to freeze the board, which the old single-
+      // offer model did by switching the phase to 'trade'.
+      if (body.action === 'propose' || body.action === 'counter') {
         if (!body.offer) throw new Error('Missing trade offer')
+
+        let parent: TradeOffer | undefined
+        if (body.action === 'counter') {
+          if (!body.offerId) throw new Error('Missing offer to counter')
+          parent = findOffer(offers, body.offerId)
+          if (!parent) throw new Error('That trade offer no longer exists')
+          if (parent.status !== 'pending') throw new Error('That trade has already been settled')
+          if (caller.id !== parent.toPlayerId) {
+            throw new AuthError('Only the recipient can counter an offer')
+          }
+        }
+
         if (caller.id !== body.offer.fromPlayerId) {
           throw new AuthError('You can only propose a trade on your own behalf')
         }
+        if (countPendingFrom(offers, caller.id) >= MAX_PENDING_OFFERS_PER_PLAYER) {
+          throw new TradeValidationError(
+            `You already have ${MAX_PENDING_OFFERS_PER_PLAYER} offers pending`,
+          )
+        }
         validateTradeProposal(storage, body.offer)
-        storage.tradeOffer = body.offer
-        storage.gamePhase = 'trade'
-        addLog(storage, 'Trade offered.')
-        event = { type: 'TRADE_OFFERED', offer: body.offer }
+
+        const created: TradeOffer = {
+          ...body.offer,
+          id: nanoid(),
+          status: 'pending',
+          createdAt: Date.now(),
+          counterOfId: parent?.id ?? null,
+        }
+
+        let next = parent ? setStatus(offers, parent.id, 'countered') : offers
+        next = appendOffer(next, created)
+        storage.tradeOffers = next
+
+        const fromName = caller.username
+        const toName =
+          storage.players.find((player) => player.id === created.toPlayerId)?.username ?? 'a player'
+        addLog(
+          storage,
+          parent ? `${fromName} countered ${toName}'s trade.` : `${fromName} offered ${toName} a trade.`,
+        )
+        event = { type: 'TRADE_OFFERED', offer: created }
         return
       }
 
-      const offer = storage.tradeOffer
-      if (!offer) throw new Error('No pending trade offer')
+      if (!body.offerId) throw new Error('Missing offer id')
+      const offer = findOffer(offers, body.offerId)
+      if (!offer) throw new Error('That trade offer no longer exists')
+      if (offer.status !== 'pending') throw new Error('That trade has already been settled')
+
+      // Withdrawing your own offer is the proposer's right; answering it is the
+      // recipient's. Neither may do the other's.
+      if (body.action === 'cancel') {
+        if (caller.id !== offer.fromPlayerId) {
+          throw new AuthError('Only the player who made an offer can withdraw it')
+        }
+        storage.tradeOffers = setStatus(offers, offer.id, 'cancelled')
+        addLog(storage, `${caller.username} withdrew a trade offer.`)
+        return
+      }
+
       if (caller.id !== offer.toPlayerId) {
         throw new AuthError('Only the trade recipient can respond to this offer')
       }
       if (!body.accept) {
-        storage.tradeOffer = null
-        storage.gamePhase = 'playing'
+        storage.tradeOffers = setStatus(offers, offer.id, 'rejected')
         addLog(storage, 'Trade rejected.')
         return
       }
@@ -149,8 +217,10 @@ export async function POST(req: NextRequest) {
       from.properties = [...from.properties.filter((id) => !offer.offeredProperties.includes(id)), ...offer.requestedProperties]
       to.properties = [...to.properties.filter((id) => !offer.requestedProperties.includes(id)), ...offer.offeredProperties]
       storage.properties = toPropertyRecord(properties)
-      storage.tradeOffer = null
-      storage.gamePhase = 'playing'
+      // Settling one offer invalidates nothing else automatically — other pending
+      // offers are re-validated when they are themselves accepted, so a trade that
+      // gave away a requested property simply fails at that point with a clear error.
+      storage.tradeOffers = setStatus(offers, offer.id, 'accepted')
       addLog(storage, 'Trade accepted.')
       if (fromInterest > 0 || toInterest > 0) {
         addLog(storage, `Mortgage transfer interest paid: ${[fromInterest > 0 ? `${from.username} $${fromInterest}` : '', toInterest > 0 ? `${to.username} $${toInterest}` : ''].filter(Boolean).join(', ')}.`)

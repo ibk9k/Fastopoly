@@ -60,13 +60,25 @@ export async function cleanupInactiveRooms(thresholdMs: number = INACTIVITY_THRE
 /**
  * Touches the last_active_at timestamp for an active room in Supabase.
  */
-export async function touchRoomActivity(roomId: string): Promise<void> {
+export async function touchRoomActivity(
+  roomId: string,
+  playerCount?: number | null,
+  maxPlayers?: number | null,
+): Promise<void> {
   if (!roomId) return
   try {
-    await supabaseAdmin
-      .from('public_rooms')
-      .update({ last_active_at: new Date().toISOString() })
-      .eq('id', roomId)
+    const patch: { last_active_at: string; player_count?: number; max_players?: number } = {
+      last_active_at: new Date().toISOString(),
+    }
+    // Each figure is written only when the caller actually established it. Passing an
+    // unknown value through would overwrite a good number with a wrong one.
+    if (typeof playerCount === 'number' && playerCount >= 0) {
+      patch.player_count = playerCount
+    }
+    if (typeof maxPlayers === 'number' && maxPlayers > 0) {
+      patch.max_players = maxPlayers
+    }
+    await supabaseAdmin.from('public_rooms').update(patch).eq('id', roomId)
   } catch {
     // Ignore error
   }

@@ -6,10 +6,17 @@ import type { TradeOffer } from '@/lib/liveblocks.config'
 import { useOthers, useSelf, useStorage } from '@/lib/liveblocks.config'
 import { colorForGroup, formatMoney, isTradableProperty, playerIdFromConnection, postJson, propertyDisplayName, resolveLocalPlayer } from '@/components/game/helpers'
 import { getTile } from '@/lib/game-engine/board'
+import { canOfferCash } from '@/lib/game-engine/trades'
 
 type TradePanelProps = {
   roomId: string
   onClose: () => void
+  /**
+   * When set, this panel is composing a counter to that offer: the sides are
+   * pre-filled swapped (what they asked of you becomes what you are offering), and
+   * sending closes the original rather than opening an unrelated second trade.
+   */
+  counterOf?: TradeOffer | null
 }
 
 type TradeResponse = {
@@ -26,20 +33,26 @@ function toggleSelection(current: string[], propertyId: string): string[] {
   return current.includes(propertyId) ? current.filter((id) => id !== propertyId) : [...current, propertyId]
 }
 
-export default function TradePanel({ roomId, onClose }: TradePanelProps) {
+export default function TradePanel({ roomId, onClose, counterOf = null }: TradePanelProps) {
   const self = useSelf()
   const others = useOthers()
   const storedPlayers = useStorage((root) => root.players)
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
   const properties = useStorage((root) => root.properties)
   const selfPlayer = resolveLocalPlayer(players, self)
-  const [targetPlayerId, setTargetPlayerId] = useState('')
-  const [offeredProperties, setOfferedProperties] = useState<string[]>([])
-  const [requestedProperties, setRequestedProperties] = useState<string[]>([])
-  const [offeredCashInput, setOfferedCashInput] = useState('0')
-  const [requestedCashInput, setRequestedCashInput] = useState('0')
-  const [offeredJailCards, setOfferedJailCards] = useState(0)
-  const [requestedJailCards, setRequestedJailCards] = useState(0)
+  // Countering starts from the mirror image of the offer being answered: their
+  // "requested" is now what you give, their "offered" is what you ask for.
+  const [targetPlayerId, setTargetPlayerId] = useState(counterOf?.fromPlayerId ?? '')
+  const [offeredProperties, setOfferedProperties] = useState<string[]>(
+    counterOf?.requestedProperties ?? [],
+  )
+  const [requestedProperties, setRequestedProperties] = useState<string[]>(
+    counterOf?.offeredProperties ?? [],
+  )
+  const [offeredCashInput, setOfferedCashInput] = useState(String(counterOf?.requestedCash ?? 0))
+  const [requestedCashInput, setRequestedCashInput] = useState(String(counterOf?.offeredCash ?? 0))
+  const [offeredJailCards, setOfferedJailCards] = useState(counterOf?.requestedJailCards ?? 0)
+  const [requestedJailCards, setRequestedJailCards] = useState(counterOf?.offeredJailCards ?? 0)
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
 
@@ -77,8 +90,11 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
     if (!selfPlayer) return 'You are not seated in this game.'
     if (!targetPlayer) return 'Choose a player to trade with.'
     if (selfPlayer.id === targetPlayer.id) return 'Choose a different player.'
-    if (offeredCash > selfPlayer.cash) return 'You do not have enough cash for this offer.'
-    if (requestedCash > targetPlayer.cash) return `${targetPlayer.username} does not have enough cash.`
+    // Clamped at zero on both sides: a player in debt holds negative cash, and a
+    // plain `> cash` comparison rejected even a $0, properties-only offer — which
+    // is exactly the trade someone in debt needs to make to raise funds.
+    if (!canOfferCash(selfPlayer.cash, offeredCash)) return 'You do not have enough cash for this offer.'
+    if (!canOfferCash(targetPlayer.cash, requestedCash)) return `${targetPlayer.username} does not have enough cash.`
     if (!properties) return 'Property state is still loading.'
 
     const invalidOffered = offeredProperties.some((propertyId) => {
@@ -122,7 +138,13 @@ export default function TradePanel({ roomId, onClose }: TradePanelProps) {
     }
 
     try {
-      await postJson<TradeResponse>('/api/game/trade', { roomId, playerId: selfPlayer.id, offer, action: 'propose' })
+      await postJson<TradeResponse>('/api/game/trade', {
+        roomId,
+        playerId: selfPlayer.id,
+        offer,
+        action: counterOf ? 'counter' : 'propose',
+        offerId: counterOf?.id,
+      })
       onClose()
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Trade offer failed')

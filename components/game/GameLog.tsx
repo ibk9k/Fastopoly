@@ -17,7 +17,7 @@ function relativeTime(timestamp: number, now: number): string {
   return `${Math.floor(minutes / 60)}h ago`
 }
 
-export default function GameLog() {
+export default function GameLog({ bare = false }: { bare?: boolean } = {}) {
   const storedPlayers = useStorage((root) => root.players)
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
   const storedLog = useStorage((root) => root.log)
@@ -69,17 +69,22 @@ export default function GameLog() {
 
   const latestMessage = entries.length ? entries[entries.length - 1].message : ''
 
-  return (
-    <section className="rounded-lg border border-salmon-line/60 bg-salmon p-4 shadow-card">
+  const body = (
+    <>
       {/* Announces each new game event (turn, roll, rent, card) to screen readers. */}
       <p className="sr-only" aria-live="polite">
         {latestMessage}
       </p>
-      <div className="flex items-center justify-between">
-        <h2 className="font-display uppercase tracking-wide text-zinc-900">Log</h2>
-        <p className="text-xs text-zinc-700">{entries.length} entries</p>
-      </div>
-      <div className="mt-4 max-h-72 overflow-y-auto pr-1">
+      {bare ? null : (
+        <div className="flex items-center justify-between">
+          <h2 className="font-display uppercase tracking-wide text-zinc-900">Log</h2>
+          <p className="text-xs text-zinc-700">{entries.length} entries</p>
+        </div>
+      )}
+      {/* When bare, the host panel owns the height and this just fills it — `h-full`
+        * plus `min-h-0` is what makes the overflow scroll here instead of stretching
+        * the panel to fit every entry. */}
+      <div className={`${bare ? 'h-full min-h-0' : 'mt-4 max-h-72'} overflow-y-auto pr-1`}>
         <div className="grid gap-3">
           {entries.length === 0 ? <p className="text-sm text-zinc-600">No events yet.</p> : null}
           {entries.map((entry) => (
@@ -91,6 +96,12 @@ export default function GameLog() {
           <div ref={endRef} />
         </div>
       </div>
-    </section>
+    </>
   )
+
+  // `bare` drops the panel shell so SidePanel can host the log inside its own
+  // Comments/Logs frame without double borders.
+  if (bare) return body
+
+  return <section className="rounded-lg border border-salmon-line/60 bg-salmon p-4 shadow-card">{body}</section>
 }

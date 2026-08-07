@@ -74,9 +74,20 @@ select {
   }
 }
 
-@media (min-width: 1024px) {
+/* The three-column game layout (>= 1280px) sizes the RAILS around the board rather
+ * than the board around the rails: the grid's centre track is content-sized, so the
+ * board asks for the largest square the viewport height allows and the rails share
+ * what is left. The old rule hardcoded `100vw - 420px`, which modelled a single
+ * 360px rail — once a left rail existed the board was starved to ~684px at 1440
+ * while 216px of vertical space sat unused.
+ *
+ * `max-width: 100%` is what lets the grid shrink the board when the rails reach
+ * their 240px floor, instead of overflowing the row. */
+@media (min-width: 1280px) {
   .board-wrapper {
-    max-width: min(calc(100vw - 420px), calc(100vh - 48px));
+    width: calc(100vh - 48px);
+    width: calc(100dvh - 48px);
+    max-width: 100%;
   }
 }
 
