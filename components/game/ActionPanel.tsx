@@ -8,6 +8,7 @@ import { useSelf, useStorage } from '@/lib/liveblocks.config'
 import { formatMoney, resolveLocalPlayer } from '@/components/game/helpers'
 import { useGameActions } from '@/hooks/useGameActions'
 import ActiveTrades from '@/components/game/ActiveTrades'
+import { offersAwaiting, pendingOffers } from '@/lib/game-engine/trades'
 
 type ActionPanelProps = {
   roomId: string
@@ -28,7 +29,20 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, onO
   const selfPlayer = resolveLocalPlayer(players, self, activePlayer?.id)
   const isActivePlayer = Boolean(activePlayer && selfPlayer && activePlayer.id === selfPlayer.id)
   const properties = useStorage((root) => root.properties)
+  const storedOffers = useStorage((root) => root.tradeOffers)
   const [showBankruptConfirm, setShowBankruptConfirm] = useState(false)
+  const [showTrades, setShowTrades] = useState(false)
+
+  // The sidebar lists trades inline; the mobile bar is a fixed strip with no room
+  // for a list, so it gets a count that opens the same list in a modal. Without
+  // this, pending trades were unreachable below 1280px.
+  const tradeCounts = useMemo(() => {
+    const pending = pendingOffers(storedOffers ?? [])
+    return {
+      total: pending.length,
+      awaitingYou: selfPlayer ? offersAwaiting(pending, selfPlayer.id).length : 0,
+    }
+  }, [storedOffers, selfPlayer])
 
   const { busyAction, declareBankruptcy } = useGameActions(roomId, selfPlayer?.id)
 
@@ -106,6 +120,17 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, onO
           <Button variant="secondary" size="sm" onClick={onOpenProperties}>
             Manage
           </Button>
+          {placement === 'mobile' && onOpenOffer && tradeCounts.total > 0 ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowTrades(true)}
+              className={tradeCounts.awaitingYou > 0 ? '!border-pine !text-pine' : undefined}
+            >
+              Trades ({tradeCounts.total})
+              {tradeCounts.awaitingYou > 0 ? <span className="sr-only">, {tradeCounts.awaitingYou} awaiting you</span> : null}
+            </Button>
+          ) : null}
           {selfPlayer && !selfPlayer.isBankrupt ? (
             <Button
               variant="secondary"
@@ -126,6 +151,18 @@ export default function ActionPanel({ roomId, onOpenTrade, onOpenProperties, onO
         {pendingBuy ? <p className="mt-3 text-sm font-semibold text-zinc-800">{pendingBuy.name} is available.</p> : null}
         {/* The debt warning is surfaced as a center-screen DebtOverlay (mounted in GameBoard). */}
       </section>
+
+      {showTrades && onOpenOffer ? (
+        <Modal title="Active trades" onClose={() => setShowTrades(false)} width="max-w-sm">
+          <ActiveTrades
+            bare
+            onOpenOffer={(offerId) => {
+              setShowTrades(false)
+              onOpenOffer(offerId)
+            }}
+          />
+        </Modal>
+      ) : null}
 
       {showBankruptConfirm ? (
         <Modal title="Declare bankruptcy?" onClose={() => setShowBankruptConfirm(false)} width="max-w-sm">

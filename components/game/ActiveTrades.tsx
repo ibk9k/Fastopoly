@@ -14,7 +14,14 @@ import { pendingOffers } from '@/lib/game-engine/trades'
  * made the rail overflow as soon as two trades were live. This is an index, not a
  * summary.
  */
-export default function ActiveTrades({ onOpenOffer }: { onOpenOffer: (offerId: string) => void }) {
+export default function ActiveTrades({
+  onOpenOffer,
+  /** Drops the divider and heading, for when a container already supplies them. */
+  bare = false,
+}: {
+  onOpenOffer: (offerId: string) => void
+  bare?: boolean
+}) {
   const self = useSelf()
   const storedPlayers = useStorage((root) => root.players)
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
@@ -28,13 +35,15 @@ export default function ActiveTrades({ onOpenOffer }: { onOpenOffer: (offerId: s
     players.find((player) => player.id === playerId)?.username ?? 'A player'
 
   return (
-    <div className="mt-3 border-t border-salmon-line/50 pt-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-[0.18em] font-bold text-zinc-700">Active trades</p>
-        <p className="text-xs text-zinc-700">{offers.length}</p>
-      </div>
+    <div className={bare ? '' : 'mt-3 border-t border-salmon-line/50 pt-3'}>
+      {bare ? null : (
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.18em] font-bold text-zinc-700">Active trades</p>
+          <p className="text-xs text-zinc-700">{offers.length}</p>
+        </div>
+      )}
 
-      <div className="mt-2 grid max-h-32 gap-1 overflow-y-auto pr-1">
+      <div className={`grid gap-1 overflow-y-auto pr-1 ${bare ? 'max-h-[60vh]' : 'mt-2 max-h-32'}`}>
         {offers.map((offer) => {
           // Anything awaiting *your* answer is the actionable one, so it is marked.
           const needsYou = offer.toPlayerId === selfPlayer?.id

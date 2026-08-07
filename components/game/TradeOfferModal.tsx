@@ -5,7 +5,9 @@ import { playCue } from '@/lib/game-client/audio'
 import type { TradeOffer } from '@/lib/liveblocks.config'
 import { useEventListener, useSelf, useStorage } from '@/lib/liveblocks.config'
 import { offersAwaiting } from '@/lib/game-engine/trades'
-import { formatMoney, postJson, propertyDisplayName, resolveLocalPlayer } from '@/components/game/helpers'
+import PropertyChip from '@/components/game/PropertyChip'
+import { formatMoney, postJson, resolveLocalPlayer } from '@/components/game/helpers'
+import type { PropertyLookup } from '@/components/game/helpers'
 
 type TradeOfferModalProps = {
   roomId: string
@@ -30,11 +32,13 @@ function OfferSide({
   propertyIds,
   cash,
   jailCards = 0,
+  properties,
 }: {
   title: string
   propertyIds: readonly string[]
   cash: number
   jailCards?: number
+  properties: PropertyLookup | null
 }) {
   return (
     <div className="rounded-md border border-[#e58a74]/30 bg-white/50 p-4">
@@ -47,7 +51,14 @@ function OfferSide({
           </p>
         ) : null}
         {propertyIds.map((propertyId) => (
-          <p key={propertyId} className="font-semibold">{propertyDisplayName(propertyId)}</p>
+          <PropertyChip
+            key={propertyId}
+            propertyId={propertyId}
+            // Mortgaged deeds are tradable, and the recipient owes 10% interest on
+            // arrival — the one thing that can make a generous-looking side a cost.
+            mortgaged={Boolean(properties?.[propertyId]?.mortgaged)}
+            className="w-full"
+          />
         ))}
         {cash === 0 && jailCards === 0 && propertyIds.length === 0 ? <p className="text-zinc-600">Nothing</p> : null}
       </div>
@@ -73,6 +84,7 @@ export default function TradeOfferModal({
   const storedPlayers = useStorage((root) => root.players)
   const players = useMemo(() => storedPlayers ?? [], [storedPlayers])
   const storedOffers = useStorage((root) => root.tradeOffers)
+  const properties = useStorage((root) => root.properties) ?? null
   const selfPlayer = resolveLocalPlayer(players, self)
 
   const [dismissed, setDismissed] = useState<string[]>([])
@@ -165,6 +177,7 @@ export default function TradeOfferModal({
   }
 
   const fromPlayer = offer ? players.find((player) => player.id === offer.fromPlayerId) : undefined
+  const toPlayer = offer ? players.find((player) => player.id === offer.toPlayerId) : undefined
 
   return (
     <>
@@ -182,8 +195,18 @@ export default function TradeOfferModal({
                 <p className="text-sm uppercase tracking-[0.18em] text-zinc-700 font-bold">
                   {offer.counterOfId ? 'Counter offer' : 'Trade offer'}
                 </p>
-                <h2 className="mt-1 text-2xl font-black text-zinc-900">{fromPlayer?.username ?? 'A player'} wants to trade</h2>
-                <p className="mt-1 text-sm text-zinc-700">Review the exchange before responding.</p>
+                <h2 className="mt-1 text-2xl font-black text-zinc-900">
+                  {isProposer
+                    ? `Your offer to ${toPlayer?.username ?? 'a player'}`
+                    : `${fromPlayer?.username ?? 'A player'} wants to trade`}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-700">
+                  {isRecipient
+                    ? 'Review the exchange before responding.'
+                    : isProposer
+                      ? 'Waiting for them to respond.'
+                      : 'Between two other players.'}
+                </p>
               </div>
               <button
                 onClick={close}
@@ -196,17 +219,23 @@ export default function TradeOfferModal({
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              {/* Each side is labelled by who actually parts with it. Naming the
+                * right-hand side "You give" unconditionally was wrong for the two
+                * viewers who are not the recipient: the proposer saw their own
+                * offer with the other player's column labelled as theirs. */}
               <OfferSide
-                title={`${fromPlayer?.username ?? 'They'} gives`}
+                title={isProposer ? 'You give' : `${fromPlayer?.username ?? 'They'} gives`}
                 propertyIds={offer.offeredProperties}
                 cash={offer.offeredCash}
                 jailCards={offer.offeredJailCards}
+                properties={properties}
               />
               <OfferSide
-                title="You give"
+                title={isRecipient ? 'You give' : `${toPlayer?.username ?? 'They'} gives`}
                 propertyIds={offer.requestedProperties}
                 cash={offer.requestedCash}
                 jailCards={offer.requestedJailCards}
+                properties={properties}
               />
             </div>
 

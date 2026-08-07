@@ -328,7 +328,7 @@ export default function GameBoard() {
           {/* Always mounted (not inside a hidden rail) so the timer keeps enforcing on every viewport. */}
           <TurnTimer roomId={roomId} selfPlayerId={selfPlayer?.id} isActivePlayer={activePlayer?.id === selfPlayer?.id} />
           <DebtOverlay roomId={roomId} onManage={() => setPropertiesOpen(true)} />
-          <ActionPanel roomId={roomId} onOpenTrade={() => setTradeOpen(true)} onOpenProperties={() => setPropertiesOpen(true)} placement="mobile" />
+          <ActionPanel roomId={roomId} onOpenTrade={() => setTradeOpen(true)} onOpenProperties={() => setPropertiesOpen(true)} onOpenOffer={setViewOfferId} placement="mobile" />
         </>
       ) : null}
 
